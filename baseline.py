@@ -445,7 +445,7 @@ def main(argv=None):  # pylint: disable=unused-argument
 
         else:
             # Run all the initializers to prepare the trainable parameters.
-            tf.initialize_all_variables().run()
+            tf.global_variables_initializer().run()
 
             # Build the summary operation based on the TF collection of Summaries.
             summary_op = tf.summary.merge_all()
