@@ -283,7 +283,7 @@ def optimize(num_iterations):
         # to the placeholder variables and then runs the optimizer.
         session.run(optimizer, feed_dict=feed_dict_train)
         saver = tf.train.Saver()
-        saver.save(session, 'image-classifier-network/my_test_model')
+        saver.save(session, 'image_classifier_network/my_test_model')
 
         # Print status at end of each epoch (defined as full pass through training dataset).
         if i % int(data.train.num_examples / batch_size) == 0:
