@@ -2,29 +2,70 @@
    close all;
 
 %% import image
-name='satImage_001';
-I_rgb = imread(sprintf('../data/training/images/%s.png',name));
+img_list = dir('../data/training/images/sat*.png');
+figure(1);
 
-% name='andy_bernerTriathlon2';
-% I_rgb = imread(sprintf('images/%s.jpeg',name));
+for i = 1:size(img_list)
+    file=img_list(i);
+    I_rgb = imread(sprintf('../data/training/images/%s', file.name));
 
-I = rgb2gray(im2double(I_rgb));
-I_ratio=double(I_rgb)./repmat(I,[1 1 3])./255;
+    % name='andy_bernerTriathlon2';
+    % I_rgb = imread(sprintf('images/%s.jpeg',name));
+
+    I = rgb2gray(im2double(I_rgb));
+    I_ratio=double(I_rgb)./repmat(I,[1 1 3])./255;
+
+
+    %% image smoothing
+    sigma=0.1;
+    N=100;
+    fact=-1;
+    tic
+    I_smoothed=llf(I,sigma,fact,N);
+    % I_smoothed=llf_andy(I_ratio,I,sigma,fact,N);
+    toc
+    I_smoothed=repmat(I_smoothed,[1 1 3]).*I_ratio;
+
+    imshow(I_smoothed);
+    title('Image Smoothed');
     
+    file_split = strsplit(file.name, '.');
+    smooth_name = file_split{1};
+    imwrite(I_smoothed, sprintf('../data/training_smooth/images/%s.jpg', smooth_name), 'Quality', 100)
+end
 
-%% image smoothing
-sigma=0.2;
-N=5;
-fact=-1;
-tic
-I_smoothed=llf_andy(I_ratio,I,sigma,fact,N);
-toc
-I_smoothed=repmat(I_smoothed,[1 1 3]).*I_ratio;
 
-figure;
-imshow(I_smoothed);
-title('Image Smoothed');
-return;
+%% import image
+img_list = dir('../data/test_set_images/test_*');
+
+for i = 1:size(img_list)
+    file=img_list(i)
+    I_rgb = imread(sprintf('../data/test_set_images/%s/%s.png', file.name, file.name));
+
+    % name='andy_bernerTriathlon2';
+    % I_rgb = imread(sprintf('images/%s.jpeg',name));
+
+    I = rgb2gray(im2double(I_rgb));
+    I_ratio=double(I_rgb)./repmat(I,[1 1 3])./255;
+
+
+    %% image smoothing
+    sigma=0.1;
+    N=100;
+    fact=-1;
+    tic
+    I_smoothed=llf(I,sigma,fact,N);
+    % I_smoothed=llf_andy(I_ratio,I,sigma,fact,N);
+    toc
+    I_smoothed=repmat(I_smoothed,[1 1 3]).*I_ratio;
+
+    imshow(I_smoothed);
+    title('Image Smoothed');
+    
+    file_split = strsplit(file.name, '.');
+    smooth_name = file_split{1};
+    imwrite(I_smoothed, sprintf('../data/test_set_smooth/%s/%s.jpg', file.name, file.name), 'Quality', 100)
+end
 
 
 
