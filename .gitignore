@@ -1,2 +1,3 @@
 .idea
 fcn/vgg16.npy
+*/__pycache__/*
