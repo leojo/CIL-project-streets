@@ -39,7 +39,7 @@ end
 img_list = dir('../data/test_set_images/test_*');
 
 for i = 1:size(img_list)
-    file=img_list(i)
+    file=img_list(i);
     I_rgb = imread(sprintf('../data/test_set_images/%s/%s.png', file.name, file.name));
 
     % name='andy_bernerTriathlon2';
