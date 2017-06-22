@@ -10,9 +10,9 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_PATCH_SIZE = 100
-NUM_EPOCHS = 3
-BATCH_SIZE = 20
+IMG_PATCH_SIZE = 200
+NUM_EPOCHS = 1
+BATCH_SIZE = 10
 
 def img_crop(im, w, h):
 		list_patches = []
@@ -67,11 +67,16 @@ def main():
 	y_ = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE*IMG_PATCH_SIZE])
 	training = tf.placeholder(tf.bool)
 
+
+	imgs, labs = load_train_data("../data/training/", IMG_PATCH_SIZE)
+	n_training = imgs.shape[0]-BATCH_SIZE
+
 	# Convolutional Layer #1
 	conv1 = tf.layers.conv2d(
 			inputs=x,
-			filters=32,
-			kernel_size=[5, 5],
+			filters=96,
+			kernel_size=[11, 11],
+			strides = 4,
 			padding="same",
 			activation=tf.nn.relu)
 
@@ -81,7 +86,7 @@ def main():
 	# Convolutional Layer #2 and Pooling Layer #2
 	conv2 = tf.layers.conv2d(
 			inputs=pool1,
-			filters=64,
+			filters=256,
 			kernel_size=[5, 5],
 			padding="same",
 			activation=tf.nn.relu)
@@ -91,60 +96,81 @@ def main():
 	# Convolutional Layer #3 and Pooling Layer #3
 	conv3 = tf.layers.conv2d(
 			inputs=pool2,
-			filters=128,
-			kernel_size=[5, 5],
+			filters=384,
+			kernel_size=[3, 3],
 			padding="same",
 			activation=tf.nn.relu)
-	pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[2, 2], strides=2)
+
+	conv4 = tf.layers.conv2d(
+			inputs=conv3,
+			filters=384,
+			kernel_size=[3, 3],
+			padding="same",
+			activation=tf.nn.relu)
+
+	conv5 = tf.layers.conv2d(
+			inputs=conv4,
+			filters=256,
+			kernel_size=[3, 3],
+			padding="same",
+			activation=tf.nn.relu)
+
+	pool5 = tf.layers.max_pooling2d(inputs=conv5, pool_size=[2, 2], strides=2)
 
 	# Dense Layer
-	pool3_flat = tf.contrib.layers.flatten(pool3)
-	dense = tf.layers.dense(inputs=pool3_flat, units=1024, activation=tf.nn.relu)
-	dropout = tf.layers.dropout(
-			inputs=dense, rate=0.4, training=training)
+	pool5_flat = tf.contrib.layers.flatten(pool5)
+	dense1 = tf.layers.dense(inputs=pool5_flat, units=4096, activation=tf.nn.relu)
+	dense2 = tf.layers.dense(inputs=dense1, units=4096, activation=tf.nn.relu)
+	dropout = tf.layers.dropout(inputs=dense2, rate=0.4, training=training)
 
 	# Logits Layer
 	logits = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
 
 	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = logits))
 
-	train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
+	batch = tf.Variable(0)
+	# Decay once per epoch, using an exponential schedule starting at 0.01.
+	learning_rate = tf.train.exponential_decay(
+			0.01,                # Base learning rate.
+			batch * BATCH_SIZE,  # Current index into the dataset.
+			n_training,          # Decay step.
+			0.95,                # Decay rate.
+			staircase=True)
 
-	imgs, labs = load_train_data("../data/training/", IMG_PATCH_SIZE)
+	train_step = tf.train.MomentumOptimizer(learning_rate,0.0).minimize(loss,global_step=batch)
 
-	sess = tf.Session()
-	sess.run(tf.global_variables_initializer())
+	with tf.Session() as sess:
+		sess.run(tf.global_variables_initializer())
 
-	n_training = imgs.shape[0]-BATCH_SIZE
-	random_order = np.random.permutation(range(imgs.shape[0]))
-	training_indices = random_order[:n_training]
-	test_indices = random_order[n_training:]
+		random_order = np.random.permutation(range(imgs.shape[0]))
+		training_indices = random_order[:n_training]
+		test_indices = random_order[n_training:]
 
-	for e in range(NUM_EPOCHS):
-		training_indices = np.random.permutation(training_indices)
-		print("Training epoch %d"%(e+1))
-		for i in range(0,n_training,BATCH_SIZE):
-			batch_range = training_indices[i:i+BATCH_SIZE]
-			print("Training: %d of %d"%(int(i/BATCH_SIZE)+1,int(n_training/BATCH_SIZE)))
-			batch = [imgs[batch_range],labs[batch_range]]
-			train_step.run(session=sess, feed_dict={x: batch[0], y_: batch[1], training: True})
+		for e in range(NUM_EPOCHS):
+			training_indices = np.random.permutation(training_indices)
+			print("Training epoch %d"%(e+1))
+			for i in range(0,n_training,BATCH_SIZE):
+				batch_range = training_indices[i:i+BATCH_SIZE]
+				print("Training: %d of %d"%(int(i/BATCH_SIZE)+1,int(n_training/BATCH_SIZE)))
+				batch = [imgs[batch_range],labs[batch_range]]
+				train_step.run(feed_dict={x: batch[0], y_: batch[1], training: True})
 
-	print("Done training")
+		print("Done training")
 
-	test_imgs = imgs[test_indices]
-	test_labs = labs[test_indices]
+		test_imgs = imgs[test_indices]
+		test_labs = labs[test_indices]
 
-	test_preds = logits.eval(session=sess, feed_dict={x:test_imgs, training: False})
+		test_preds = logits.eval(feed_dict={x:test_imgs, training: False})
 
-	np.save("test_imgs.npy",test_imgs)
-	np.save("test_labs.npy",test_labs)
-	np.save("test_preds.npy",test_preds)
+		np.save("test_imgs.npy",test_imgs)
+		np.save("test_labs.npy",test_labs)
+		np.save("test_preds.npy",test_preds)
 
-	for i in range(len(test_imgs)):
-		name = "testImg%d"%(i)
-		save(test_imgs[i],name+"_original.png")
-		save(test_labs[i],name+"_groundtruth.png")
-		save(test_preds[i],name+"_prediction.png")
+		for i in range(len(test_imgs)):
+			name = "testImg%d"%(i)
+			save(test_imgs[i],name+"_original.png")
+			save(test_labs[i],name+"_groundtruth.png")
+			save(test_preds[i],name+"_prediction.png")
 
 if __name__ == '__main__':
-    main()
+		main()
