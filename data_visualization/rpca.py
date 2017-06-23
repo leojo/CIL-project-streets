@@ -184,9 +184,10 @@ def rpca(X, mu, p):
 	cond = lambda L, S, l, previous, current, i: i < 10 
 	#cond = lambda L, S, l, previous, current: condFunc(L, S, l, previous, current, epsilon)
 	#body = lambda L, S, l, previous, current: [fD( X - S - tf.multiply(q, l), q),  fS( X - nextL - tf.multiply(q, l), tf.multiply(mu, q)) , l + tf.scalar_mul(p, tf.subtract(tf.add(nextL, nextS), X) ), current, tf.add(tf.trace(L), tf.scalar_mul(mu, tf.norm(S, ord=1)))]
-	body = lambda L, S, l, previous, current, i: bodyFunc(X, L, S, l, previous, current, mu, p, q, i)
+
+	body = lambda L, S, l, previous, current, i: [fD( X - S - tf.scalar_mul(q, l) , q), fS(X - fD( X - S - tf.scalar_mul(q, l) , q) - tf.multiply(q, l), tf.multiply(mu, q)), l + tf.scalar_mul(p, tf.subtract(tf.add(fD( X - S - tf.scalar_mul(q, l) , q), fS(X - fD( X - S - tf.scalar_mul(q, l) , q) - tf.multiply(q, l), tf.multiply(mu, q))), X) ) , current, tf.add(tf.trace(L), tf.scalar_mul(mu, tf.norm(S, ord=1))), i+1] #bodyFunc(X, L, S, l, previous, current, mu, p, q, i)
 	
-	return tf.while_loop(cond, body, loop_vars = [L0, S0, l0, previous0, current0, i0])[0]
+	return tf.while_loop(cond, body, loop_vars = [L0, S0, l0, previous0, current0, i0])
 
 def converged(currentVal, nextVal, epsilon):
 	diff = tf.subtract(nextVal,currentVal)
@@ -201,9 +202,12 @@ def main(argv=None):  # pylint: disable=unused-argument
 		print("0X SHAPE %s"%str(X.shape))
 		res = rpca(X, 0.01, 0.01)
 
+		print("We went through %s iterations"%res[5].eval())
+
+		L = res[0] # Lower rank matrix that represents X
 
 		imgBefore = X
-		imgAfter = res.eval()
+		imgAfter = L.eval()
 
 		print imgBefore.shape
 		print imgAfter.shape
