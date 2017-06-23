@@ -10,9 +10,9 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_PATCH_SIZE = 200
+IMG_PATCH_SIZE = 50
 NUM_EPOCHS = 1
-BATCH_SIZE = 10
+BATCH_SIZE = 20
 
 def img_crop(im, w, h):
 		list_patches = []
@@ -48,6 +48,44 @@ def load_train_data(train_dir,patch_size,num_images=100):
 			labs.append(lab_parts[j])
 	return np.asarray(imgs), np.asarray(labs).reshape((-1,patch_size*patch_size))
 
+def unpool(value):
+	"""N-dimensional version of the unpooling operation from
+	https://www.robots.ox.ac.uk/~vgg/rg/papers/Dosovitskiy_Learning_to_Generate_2015_CVPR_paper.pdf
+
+	:param value: A Tensor of shape [b, d0, d1, ..., dn, ch]
+	:return: A Tensor of shape [b, 2*d0, 2*d1, ..., 2*dn, ch]
+	"""
+	sh = value.get_shape().as_list()
+	dim = len(sh[1:-1])
+	out = (tf.reshape(value, [-1] + sh[-dim:]))
+	for i in range(dim, 0, -1):
+			out = tf.concat(axis=i, values=[out, tf.zeros_like(out)])
+	out_size = [-1] + [s * 2 for s in sh[1:-1]] + [sh[-1]]
+	out = tf.reshape(out, out_size)
+	return out
+
+def pool(value):
+	return tf.layers.max_pooling2d(inputs=value, pool_size=[2,2], strides=2)
+
+def conv(value,filters,kernel,strides=1,activation=tf.nn.relu):
+	return tf.layers.conv2d(
+			inputs=value,
+			filters=filters,
+			kernel_size=kernel,
+			strides=strides,
+			padding="same",
+			activity_regularizer=tf.layers.batch_normalization,
+			activation=activation)
+
+def deconv(value,filters,kernel,strides=1,activation=tf.nn.relu):
+	return tf.layers.conv2d_transpose(
+			inputs=value,
+			filters=filters,
+			kernel_size=kernel,
+			strides=strides,
+			padding="same",
+			activity_regularizer=tf.layers.batch_normalization,
+			activation=activation)
 
 def show(img):
 	if len(img.shape) < 2:
@@ -71,73 +109,37 @@ def main():
 	imgs, labs = load_train_data("../data/training/", IMG_PATCH_SIZE)
 	n_training = imgs.shape[0]-BATCH_SIZE
 
-	# Convolutional Layer #1
-	conv1 = tf.layers.conv2d(
-			inputs=x,
-			filters=96,
-			kernel_size=[11, 11],
-			strides = 4,
-			padding="same",
-			activation=tf.nn.relu)
+	# Network
+	conv1 = conv(x,32,11)
 
-	# Pooling Layer #1
-	pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+	pool1 = pool(conv1)
 
-	# Convolutional Layer #2 and Pooling Layer #2
-	conv2 = tf.layers.conv2d(
-			inputs=pool1,
-			filters=256,
-			kernel_size=[5, 5],
-			padding="same",
-			activation=tf.nn.relu)
-	pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+	conv2 = conv(pool1,64,5)
 
+	pool2 = pool(conv2)
 
-	# Convolutional Layer #3 and Pooling Layer #3
-	conv3 = tf.layers.conv2d(
-			inputs=pool2,
-			filters=384,
-			kernel_size=[3, 3],
-			padding="same",
-			activation=tf.nn.relu)
+	unpool1 = unpool(pool2)
 
-	conv4 = tf.layers.conv2d(
-			inputs=conv3,
-			filters=384,
-			kernel_size=[3, 3],
-			padding="same",
-			activation=tf.nn.relu)
+	deconv1 = deconv(unpool1,64,5)
 
-	conv5 = tf.layers.conv2d(
-			inputs=conv4,
-			filters=256,
-			kernel_size=[3, 3],
-			padding="same",
-			activation=tf.nn.relu)
+	unpool2 = unpool(deconv1)
 
-	pool5 = tf.layers.max_pooling2d(inputs=conv5, pool_size=[2, 2], strides=2)
+	deconv2 = deconv(unpool2,32,11)
 
 	# Dense Layer
-	pool5_flat = tf.contrib.layers.flatten(pool5)
-	dense1 = tf.layers.dense(inputs=pool5_flat, units=4096, activation=tf.nn.relu)
-	dense2 = tf.layers.dense(inputs=dense1, units=4096, activation=tf.nn.relu)
-	dropout = tf.layers.dropout(inputs=dense2, rate=0.4, training=training)
+	deconv2_flat = tf.contrib.layers.flatten(deconv2)
+	dense = tf.layers.dense(inputs=deconv2_flat, units=1024, activation=tf.nn.relu)
+	dropout = tf.layers.dropout(inputs=dense, rate=0.4, training=training)
 
-	# Logits Layer
-	logits = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
+	# Prediction Layer
+	predictions = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
 
-	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = logits))
+	#loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = logits)
+	loss = tf.losses.hinge_loss(labels=y_, logits=predictions, reduction=tf.losses.Reduction.NONE)
 
-	batch = tf.Variable(0)
-	# Decay once per epoch, using an exponential schedule starting at 0.01.
-	learning_rate = tf.train.exponential_decay(
-			0.01,                # Base learning rate.
-			batch * BATCH_SIZE,  # Current index into the dataset.
-			n_training,          # Decay step.
-			0.95,                # Decay rate.
-			staircase=True)
+	print_loss = tf.Print(loss,[loss])
 
-	train_step = tf.train.MomentumOptimizer(learning_rate,0.0).minimize(loss,global_step=batch)
+	train_step = tf.train.AdamOptimizer(1e-4).minimize(print_loss)
 
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
@@ -160,7 +162,7 @@ def main():
 		test_imgs = imgs[test_indices]
 		test_labs = labs[test_indices]
 
-		test_preds = logits.eval(feed_dict={x:test_imgs, training: False})
+		test_preds = predictions.eval(feed_dict={x:test_imgs, training: False})
 
 		np.save("test_imgs.npy",test_imgs)
 		np.save("test_labs.npy",test_labs)
