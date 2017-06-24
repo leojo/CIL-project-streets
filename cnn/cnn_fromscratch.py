@@ -10,9 +10,9 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_PATCH_SIZE = 50
-NUM_EPOCHS = 1
-BATCH_SIZE = 20
+IMG_PATCH_SIZE = 400
+NUM_EPOCHS = 2
+BATCH_SIZE = 10
 
 def img_crop(im, w, h):
 		list_patches = []
@@ -42,43 +42,21 @@ def load_train_data(train_dir,patch_size,num_images=100):
 		img = mpimg.imread(image_name)
 		img_parts = img_crop(img,patch_size,patch_size)
 		lab = mpimg.imread(label_name)
+		lab = np.stack([lab,1-lab],axis=-1)
 		lab_parts = img_crop(lab,patch_size,patch_size)
 		for j in range(len(img_parts)):
 			imgs.append(img_parts[j])
 			labs.append(lab_parts[j])
-	return np.asarray(imgs), np.asarray(labs).reshape((-1,patch_size*patch_size))
+	return np.asarray(imgs), np.asarray(labs)
 
 def unpool(value):
-	"""N-dimensional version of the unpooling operation from
-	https://www.robots.ox.ac.uk/~vgg/rg/papers/Dosovitskiy_Learning_to_Generate_2015_CVPR_paper.pdf
-
-	:param value: A Tensor of shape [b, d0, d1, ..., dn, ch]
-	:return: A Tensor of shape [b, 2*d0, 2*d1, ..., 2*dn, ch]
-	"""
-	sh = value.get_shape().as_list()
-	dim = len(sh[1:-1])
-	out = (tf.reshape(value, [-1] + sh[-dim:]))
-	for i in range(dim, 0, -1):
-			out = tf.concat(axis=i, values=[out, tf.zeros_like(out)])
-	out_size = [-1] + [s * 2 for s in sh[1:-1]] + [sh[-1]]
-	out = tf.reshape(out, out_size)
-	return out
+	return tf.layers.conv2d_transpose(inputs=value, filters=value.get_shape().as_list()[3], kernel_size=2, strides=2)
 
 def pool(value):
 	return tf.layers.max_pooling2d(inputs=value, pool_size=[2,2], strides=2)
 
 def conv(value,filters,kernel,strides=1,activation=tf.nn.relu):
 	return tf.layers.conv2d(
-			inputs=value,
-			filters=filters,
-			kernel_size=kernel,
-			strides=strides,
-			padding="same",
-			activity_regularizer=tf.layers.batch_normalization,
-			activation=activation)
-
-def deconv(value,filters,kernel,strides=1,activation=tf.nn.relu):
-	return tf.layers.conv2d_transpose(
 			inputs=value,
 			filters=filters,
 			kernel_size=kernel,
@@ -102,7 +80,7 @@ def save(img,name):
 
 def main():
 	x = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE, IMG_PATCH_SIZE, 3])
-	y_ = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE*IMG_PATCH_SIZE])
+	y_ = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE, IMG_PATCH_SIZE, 2])
 	training = tf.placeholder(tf.bool)
 
 
@@ -110,32 +88,45 @@ def main():
 	n_training = imgs.shape[0]-BATCH_SIZE
 
 	# Network
-	conv1 = conv(x,32,11)
+	norm = tf.nn.lrn(x, depth_radius=5, bias=1.0, alpha=0.0001, beta=0.75,
+								name='norm1')
 
+	conv1 = conv(norm,64,7)
 	pool1 = pool(conv1)
 
-	conv2 = conv(pool1,64,5)
-
+	conv2 = conv(pool1,64,7)
 	pool2 = pool(conv2)
 
-	unpool1 = unpool(pool2)
+	conv3 = conv(pool2,64,7)
+	pool3 = pool(conv3)
 
-	deconv1 = deconv(unpool1,64,5)
+	conv4 = conv(pool3,64,7)
+	pool4 = pool(conv4)
 
-	unpool2 = unpool(deconv1)
+	unpool4 = unpool(pool4)
+	deconv4 = conv(unpool4,64,7,activation=None)
 
-	deconv2 = deconv(unpool2,32,11)
+	unpool3 = unpool(deconv4)
+	deconv3 = conv(unpool3,64,7,activation=None)
+
+	unpool2 = unpool(deconv3)
+	deconv2 = conv(unpool2,64,7,activation=None)
+
+	unpool1 = unpool(deconv2)
+	deconv1 = conv(unpool1,64,7,activation=None)
+
+	predictions = conv(deconv1,2,1,activation=None)
 
 	# Dense Layer
-	deconv2_flat = tf.contrib.layers.flatten(deconv2)
-	dense = tf.layers.dense(inputs=deconv2_flat, units=1024, activation=tf.nn.relu)
-	dropout = tf.layers.dropout(inputs=dense, rate=0.4, training=training)
+	#deconv2_flat = tf.contrib.layers.flatten(deconv2)
+	#dense = tf.layers.dense(inputs=deconv2_flat, units=1024, activation=tf.nn.relu)
+	#dropout = tf.layers.dropout(inputs=dense, rate=0.4, training=training)
 
 	# Prediction Layer
-	predictions = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
+	#predictions = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
 
-	#loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = logits)
-	loss = tf.losses.hinge_loss(labels=y_, logits=predictions, reduction=tf.losses.Reduction.NONE)
+	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
+	#loss = tf.losses.hinge_loss(labels=y_, logits=predictions, reduction=tf.losses.Reduction.NONE)
 
 	print_loss = tf.Print(loss,[loss])
 
@@ -162,7 +153,7 @@ def main():
 		test_imgs = imgs[test_indices]
 		test_labs = labs[test_indices]
 
-		test_preds = predictions.eval(feed_dict={x:test_imgs, training: False})
+		test_preds = predictions.eval(feed_dict={x:test_imgs, training: False})[:,:,:,0]
 
 		np.save("test_imgs.npy",test_imgs)
 		np.save("test_labs.npy",test_labs)
