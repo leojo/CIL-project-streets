@@ -184,6 +184,7 @@ def rpca(X, mu, p):
 	cond = lambda L, S, l, previous, current, i: i < 10 
 	#cond = lambda L, S, l, previous, current: condFunc(L, S, l, previous, current, epsilon)
 	#body = lambda L, S, l, previous, current: [fD( X - S - tf.multiply(q, l), q),  fS( X - nextL - tf.multiply(q, l), tf.multiply(mu, q)) , l + tf.scalar_mul(p, tf.subtract(tf.add(nextL, nextS), X) ), current, tf.add(tf.trace(L), tf.scalar_mul(mu, tf.norm(S, ord=1)))]
+
 	body = lambda L, S, l, previous, current, i: [fD( X - S - tf.scalar_mul(q, l) , q), fS(X - fD( X - S - tf.scalar_mul(q, l) , q) - tf.multiply(q, l), tf.multiply(mu, q)), l + tf.scalar_mul(p, tf.subtract(tf.add(fD( X - S - tf.scalar_mul(q, l) , q), fS(X - fD( X - S - tf.scalar_mul(q, l) , q) - tf.multiply(q, l), tf.multiply(mu, q))), X) ) , current, tf.add(tf.trace(L), tf.scalar_mul(mu, tf.norm(S, ord=1))), i+1] #bodyFunc(X, L, S, l, previous, current, mu, p, q, i)
 	
 	return tf.while_loop(cond, body, loop_vars = [L0, S0, l0, previous0, current0, i0])

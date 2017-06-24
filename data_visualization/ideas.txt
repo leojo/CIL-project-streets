@@ -1,0 +1,14 @@
+IDEAS SO FAR
+
+--> Skoða vel þessa ritgerð sem að Andy fann!!
+
+PREPROCESSING
+- Breyta baseline algorithma til að taka til allrar myndarinnar
+- Nota histogram til að finna vegi ? Senda inn histograms í CNN í staðinn fyrir myndina (bara hugmynd)
+
+OPTIMIZATION & OTHER CHANGES
+- Gradient Descent Optimization eða sambærilegt.
+- Breyta CNN, fjölga lögum, breyta activation föllum, eitthvað ???
+
+POSTPROCESSING
+- Algorithmi sem að skoðar output myndirnar og áttar sig á því hvort þær meiki sens, t.d. vegir ættu að vera frekar beinir en ekki grainy. Skoðum að nota PCA eða RPCA fyrir þennan part.
