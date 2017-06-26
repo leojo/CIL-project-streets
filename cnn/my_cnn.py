@@ -11,7 +11,7 @@ import matplotlib.image as mpimg
 from PIL import Image
 
 IMG_PATCH_SIZE = 400
-NUM_EPOCHS = 2
+NUM_EPOCHS = 1
 BATCH_SIZE = 10
 
 def img_crop(im, w, h):
@@ -30,14 +30,14 @@ def img_crop(im, w, h):
 
 
 
-def load_train_data(train_dir,patch_size,num_images=100):
+def load_train_data(train_dir,patch_size,num_images=100,mode="png"):
 	images_dir = train_dir+"images/"
 	labels_dir = train_dir+"groundtruth/"
 	imgs = []
 	labs = []
 	for i in range(1,num_images+1):
 		imageid = "satImage_%.3d" % i
-		image_name = images_dir+imageid+".png"
+		image_name = images_dir+imageid+"."+mode
 		label_name = labels_dir+imageid+".png"
 		img = mpimg.imread(image_name)
 		img_parts = img_crop(img,patch_size,patch_size)
@@ -48,6 +48,9 @@ def load_train_data(train_dir,patch_size,num_images=100):
 			imgs.append(img_parts[j])
 			labs.append(lab_parts[j])
 	return np.asarray(imgs), np.asarray(labs)
+
+#def load_test_data(test_dit,patch_size,num_images=50):
+
 
 def unpool(value):
 	return tf.layers.conv2d_transpose(inputs=value, filters=value.get_shape().as_list()[3], kernel_size=2, strides=2)
@@ -84,14 +87,14 @@ def main():
 	training = tf.placeholder(tf.bool)
 
 
-	imgs, labs = load_train_data("../data/training/", IMG_PATCH_SIZE)
+	imgs, labs = load_train_data("../data/training_smooth/", IMG_PATCH_SIZE, mode="jpg")
 	n_training = imgs.shape[0]-BATCH_SIZE
 
 	# Network
 	norm = tf.nn.lrn(x, depth_radius=5, bias=1.0, alpha=0.0001, beta=0.75,
 								name='norm1')
 
-	conv1 = conv(norm,64,7)
+	conv1 = conv(norm,32,25)
 	pool1 = pool(conv1)
 
 	conv2 = conv(pool1,64,7)
@@ -100,11 +103,11 @@ def main():
 	conv3 = conv(pool2,64,7)
 	pool3 = pool(conv3)
 
-	conv4 = conv(pool3,64,7)
+	conv4 = conv(pool3,128,7)
 	pool4 = pool(conv4)
 
 	unpool4 = unpool(pool4)
-	deconv4 = conv(unpool4,64,7,activation=None)
+	deconv4 = conv(unpool4,128,7,activation=None)
 
 	unpool3 = unpool(deconv4)
 	deconv3 = conv(unpool3,64,7,activation=None)
@@ -113,7 +116,7 @@ def main():
 	deconv2 = conv(unpool2,64,7,activation=None)
 
 	unpool1 = unpool(deconv2)
-	deconv1 = conv(unpool1,64,7,activation=None)
+	deconv1 = conv(unpool1,32,25,activation=None)
 
 	predictions = conv(deconv1,2,1,activation=None)
 
