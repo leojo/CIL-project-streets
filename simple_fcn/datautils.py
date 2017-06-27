@@ -25,9 +25,9 @@ SEED = 66478  # Set to None for random seed.
 BATCH_SIZE = 16 # 64
 
 # Set image patch size
-# IMG_PATCH_SIZE should be a multiple of 4
+# FCN.IMG_PATCH_SIZE should be a multiple of 4
 # image size should be an integer multiple of this number!
-IMG_PATCH_SIZE = 16
+# FCN.IMG_PATCH_SIZE = 4
 
 # Extract patches from a given image
 def img_crop(im, w, h):
@@ -44,14 +44,14 @@ def img_crop(im, w, h):
 			list_patches.append(im_patch)
 	return list_patches
 
-def extract_data(filename, num_images):
+def extract_data(filename, num_images, img_patch_size, img_type="png"):
 	"""Extract the images into a 4D tensor [image index, y, x, channels].
 	Values are rescaled from [0, 255] down to [-0.5, 0.5].
 	"""
 	imgs = []
 	for i in range(1, num_images+1):
 		imageid = "satImage_%.3d" % i
-		image_filename = filename + imageid + ".png"
+		image_filename = filename + imageid + "." + img_type
 		if os.path.isfile(image_filename):
 			print ('Loading ' + image_filename)
 			img = mpimg.imread(image_filename)
@@ -62,12 +62,13 @@ def extract_data(filename, num_images):
 	num_images = len(imgs)
 	IMG_WIDTH = imgs[0].shape[0]
 	IMG_HEIGHT = imgs[0].shape[1]
-	N_PATCHES_PER_IMAGE = (IMG_WIDTH/IMG_PATCH_SIZE)*(IMG_HEIGHT/IMG_PATCH_SIZE)
+	N_PATCHES_PER_IMAGE = (IMG_WIDTH/img_patch_size)*(IMG_HEIGHT/img_patch_size)
 
-	img_patches = [img_crop(imgs[i], IMG_PATCH_SIZE, IMG_PATCH_SIZE) for i in range(num_images)]
+	img_patches = [img_crop(imgs[i], img_patch_size, img_patch_size) for i in range(num_images)]
 	data = [img_patches[i][j] for i in range(len(img_patches)) for j in range(len(img_patches[i]))]
 
-	return numpy.asarray(data)
+	#print("Data type at start:",numpy.asarray(data).astype(float32))
+	return numpy.asarray(data).astype(numpy.float32)
 		
 # Assign a label to a patch v
 def value_to_class(v):
@@ -79,7 +80,7 @@ def value_to_class(v):
 		return [1, 0]
 
 # Extract label images
-def extract_labels(filename, num_images):
+def extract_labels(filename, num_images, img_patch_size):
 	"""Extract the labels into a 1-hot matrix [image index, label index]."""
 	gt_imgs = []
 	for i in range(1, num_images+1):
@@ -93,7 +94,7 @@ def extract_labels(filename, num_images):
 			print ('File ' + image_filename + ' does not exist')
 
 	num_images = len(gt_imgs)
-	gt_patches = [img_crop(gt_imgs[i], IMG_PATCH_SIZE, IMG_PATCH_SIZE) for i in range(num_images)]
+	gt_patches = [img_crop(gt_imgs[i], img_patch_size, img_patch_size) for i in range(num_images)]
 	data = numpy.asarray([gt_patches[i][j] for i in range(len(gt_patches)) for j in range(len(gt_patches[i]))])
 	labels = numpy.asarray([value_to_class(numpy.mean(data[i])) for i in range(len(data))])
 
@@ -171,13 +172,13 @@ def make_img_overlay(img, predicted_img):
 	new_img = Image.blend(background, overlay, 0.2)
 	return new_img
 
-def prepareTrainData(data_dir):
+def prepareTrainData(data_dir, img_patch_size, img_type="png"):
 	train_data_filename = data_dir + 'images/'
 	train_labels_filename = data_dir + 'groundtruth/' 
 
 
-	train_data = extract_data(train_data_filename, TRAINING_SIZE)
-	train_labels = extract_labels(train_labels_filename, TRAINING_SIZE)
+	train_data = extract_data(train_data_filename, TRAINING_SIZE, img_patch_size, img_type)
+	train_labels = extract_labels(train_labels_filename, TRAINING_SIZE, img_patch_size)
 
 
 	return [train_data, train_labels]

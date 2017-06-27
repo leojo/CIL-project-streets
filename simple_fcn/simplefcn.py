@@ -23,6 +23,7 @@ class SimpleFCN:
 	PIXEL_DEPTH = 255
 	NUM_LABELS = 2
 	TRAINING_SIZE = 20
+	TEST_SIZE = 50
 	VALIDATION_SIZE = 5  # Size of the validation set.
 	SEED = 66478  # Set to None for random seed.
 	BATCH_SIZE = 16 # 64
@@ -31,11 +32,12 @@ class SimpleFCN:
 	# Set image patch size
 	# IMG_PATCH_SIZE should be a multiple of 4
 	# image size should be an integer multiple of this number!
-	IMG_PATCH_SIZE = 16
+	IMG_PATCH_SIZE = 4
 	
 	def __init__(self, sess, flags):
 		self.session = sess
 		self.FLAGS = flags
+
 		# The variables below hold all the trainable weights. They are passed an
 		# initial value which will be assigned when when we call:
 		# {tf.initialize_all_variables().run()}
@@ -60,27 +62,28 @@ class SimpleFCN:
 								seed=self.SEED))
 		self.fc2_biases = tf.Variable(tf.constant(0.1, shape=[self.NUM_LABELS]))
 
+		self.saver = tf.train.Saver()
+
+
 
 
 	def makePredictions(self, RESTORE_MODEL=False):
 
 		# Restore the model
 		try:
-			saver = tf.train.Saver()
-			saver.restore(s, self.FLAGS.train_dir + "/model.ckpt")
+			self.saver.restore(self.session, self.FLAGS.train_dir + "/model.ckpt")
 			print("Model restored.")
-		except FileNotFoundError, e:
+		except Exception, e:
 			raise Exception("No model was found! You need to train a model before making predictions.")    	
 
-		print ("Running prediction on training set")
-		prediction_training_dir = "predictions_training/"
-		if not os.path.isdir(prediction_training_dir):
-			os.mkdir(prediction_training_dir)
-		for i in range(1, TRAINING_SIZE+1):
-			pimg = self.get_prediction_with_groundtruth(train_data_filename, i)
-			Image.fromarray(pimg).save(prediction_training_dir + "prediction_" + str(i) + ".png")
-			oimg = self.get_prediction_with_overlay(train_data_filename, i)
-			oimg.save(prediction_training_dir + "overlay_" + str(i) + ".png")       
+		print ("Running prediction on test set")
+		predictions_test_dir = "predictions_test/"
+		train_data_filename = '../data/training/images/'
+		if not os.path.isdir(predictions_test_dir):
+			os.mkdir(predictions_test_dir)
+		for i in range(1, self.TEST_SIZE+1):
+			pimg = (self.get_prediction_masks(train_data_filename, i)*255).astype(numpy.uint8)
+			Image.fromarray(pimg).save(predictions_test_dir + "mask_" + str(i) + ".png")     
 
 
 	def trainModel(self, train_data, train_labels):
@@ -195,8 +198,7 @@ class SimpleFCN:
 						feed_dict=feed_dict)
 
 			# Save the variables to disk.
-			saver = tf.train.Saver()
-			save_path = saver.save(self.session, self.FLAGS.train_dir + "/model.ckpt")
+			save_path = self.saver.save(self.session, self.FLAGS.train_dir + "/model.ckpt")
 			print("Model saved in file: %s" % save_path)
 
 		train_data_filename = '../data/training/images/'
@@ -343,6 +345,15 @@ class SimpleFCN:
 		output = tf.nn.softmax(self.model(data_node))
 		output_prediction = self.session.run(output)
 		img_prediction = DU.label_to_img(img.shape[0], img.shape[1], self.IMG_PATCH_SIZE, self.IMG_PATCH_SIZE, output_prediction)
+
+		return img_prediction
+
+	def get_prediction_masks(self, filename, image_idx):
+		imageid = "satImage_%.3d" % image_idx
+		image_filename = filename + imageid + ".png"
+		img = mpimg.imread(image_filename)
+
+		img_prediction = self.get_prediction(img)
 
 		return img_prediction
 
