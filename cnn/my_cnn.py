@@ -10,38 +10,41 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_PATCH_SIZE = 400
-NUM_EPOCHS = 2
+IMG_PATCH_SIZE = -1
+NUM_IMAGES = 100
+NUM_EPOCHS = 5
 BATCH_SIZE = 10
 
 def img_crop(im, w, h):
-		list_patches = []
-		imgwidth = im.shape[0]
-		imgheight = im.shape[1]
-		is_2d = len(im.shape) < 3
-		for i in range(0,imgheight,h):
-				for j in range(0,imgwidth,w):
-						if is_2d:
-								im_patch = im[j:j+w, i:i+h]
-						else:
-								im_patch = im[j:j+w, i:i+h, :]
-						list_patches.append(im_patch)
-		return list_patches
+	if w == -1 and h == -1:
+		return [im]	
+	list_patches = []
+	imgwidth = im.shape[0]
+	imgheight = im.shape[1]
+	is_2d = len(im.shape) < 3
+	for i in range(0,imgheight,h):
+			for j in range(0,imgwidth,w):
+					if is_2d:
+							im_patch = im[j:j+w, i:i+h]
+					else:
+							im_patch = im[j:j+w, i:i+h, :]
+					list_patches.append(im_patch)
+	return list_patches
 
 
 
-def load_train_data(train_dir,patch_size,num_images=100):
+def load_train_data(train_dir,patch_size,num_images=100,mode="png"):
 	images_dir = train_dir+"images/"
 	labels_dir = train_dir+"groundtruth/"
 	imgs = []
 	labs = []
 	for i in range(1,num_images+1):
 		imageid = "satImage_%.3d" % i
-		image_name = images_dir+imageid+".png"
+		image_name = images_dir+imageid+"."+mode
 		label_name = labels_dir+imageid+".png"
 		img = mpimg.imread(image_name)
 		img_parts = img_crop(img,patch_size,patch_size)
-		lab = mpimg.imread(label_name)
+		lab = np.round(mpimg.imread(label_name))
 		lab = np.stack([lab,1-lab],axis=-1)
 		lab_parts = img_crop(lab,patch_size,patch_size)
 		for j in range(len(img_parts)):
@@ -49,8 +52,11 @@ def load_train_data(train_dir,patch_size,num_images=100):
 			labs.append(lab_parts[j])
 	return np.asarray(imgs), np.asarray(labs)
 
-def unpool(value):
-	return tf.layers.conv2d_transpose(inputs=value, filters=value.get_shape().as_list()[3], kernel_size=2, strides=2)
+#def load_test_data(test_dit,patch_size,num_images=50):
+
+
+def unpool(value,target):
+	return tf.image.resize_images(value,tf.shape(target)[1:3])
 
 def pool(value):
 	return tf.layers.max_pooling2d(inputs=value, pool_size=[2,2], strides=2)
@@ -79,12 +85,16 @@ def save(img,name):
 		Image.fromarray((img*255).astype(np.uint8)).save(name)
 
 def main():
+	global IMG_PATCH_SIZE
+	imgs, labs = load_train_data("../data/training_smooth/", IMG_PATCH_SIZE, num_images=NUM_IMAGES, mode="jpg")
+
+	if IMG_PATCH_SIZE == -1:
+		IMG_PATCH_SIZE = imgs.shape[1]
+
 	x = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE, IMG_PATCH_SIZE, 3])
 	y_ = tf.placeholder(tf.float32, [None, IMG_PATCH_SIZE, IMG_PATCH_SIZE, 2])
 	training = tf.placeholder(tf.bool)
 
-
-	imgs, labs = load_train_data("../data/training/", IMG_PATCH_SIZE)
 	n_training = imgs.shape[0]-BATCH_SIZE
 
 	# Network
@@ -103,34 +113,23 @@ def main():
 	conv4 = conv(pool3,64,7)
 	pool4 = pool(conv4)
 
-	unpool4 = unpool(pool4)
+	unpool4 = unpool(pool4,conv4)
 	deconv4 = conv(unpool4,64,7,activation=None)
 
-	unpool3 = unpool(deconv4)
+	unpool3 = unpool(deconv4,conv3)
 	deconv3 = conv(unpool3,64,7,activation=None)
 
-	unpool2 = unpool(deconv3)
+	unpool2 = unpool(deconv3,conv2)
 	deconv2 = conv(unpool2,64,7,activation=None)
 
-	unpool1 = unpool(deconv2)
+	unpool1 = unpool(deconv2,conv1)
 	deconv1 = conv(unpool1,64,7,activation=None)
 
 	predictions = conv(deconv1,2,1,activation=None)
 
-	# Dense Layer
-	#deconv2_flat = tf.contrib.layers.flatten(deconv2)
-	#dense = tf.layers.dense(inputs=deconv2_flat, units=1024, activation=tf.nn.relu)
-	#dropout = tf.layers.dropout(inputs=dense, rate=0.4, training=training)
-
-	# Prediction Layer
-	#predictions = tf.layers.dense(inputs=dropout, units=IMG_PATCH_SIZE * IMG_PATCH_SIZE)
-
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
-	#loss = tf.losses.hinge_loss(labels=y_, logits=predictions, reduction=tf.losses.Reduction.NONE)
 
-	print_loss = tf.Print(loss,[loss])
-
-	train_step = tf.train.AdamOptimizer(1e-4).minimize(print_loss)
+	train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
 
 	with tf.Session() as sess:
 		sess.run(tf.global_variables_initializer())
@@ -153,7 +152,7 @@ def main():
 		test_imgs = imgs[test_indices]
 		test_labs = labs[test_indices]
 
-		test_preds = predictions.eval(feed_dict={x:test_imgs, training: False})[:,:,:,0]
+		test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
 
 		np.save("test_imgs.npy",test_imgs)
 		np.save("test_labs.npy",test_labs)
@@ -162,7 +161,7 @@ def main():
 		for i in range(len(test_imgs)):
 			name = "testImg%d"%(i)
 			save(test_imgs[i],name+"_original.png")
-			save(test_labs[i],name+"_groundtruth.png")
+			save(test_labs[i,:,:,0],name+"_groundtruth.png")
 			save(test_preds[i],name+"_prediction.png")
 
 if __name__ == '__main__':
