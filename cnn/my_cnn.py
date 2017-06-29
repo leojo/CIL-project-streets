@@ -10,12 +10,13 @@ from PIL import Image
 
 IMG_PATCH_SIZE = 128
 NUM_IMAGES = 100
-NUM_SAMPLES = 100
-NUM_EPOCHS = 25
-BATCH_SIZE = 100
+NUM_SAMPLES = 10
+NUM_EPOCHS = 50
+BATCH_SIZE = 10
 LEARNING_RATE = 1e-4
 
 SAVE_FILE = "model.ckpt"
+LOAD = True
 
 def readable_time(seconds):
 	secs = int(seconds)%60
@@ -84,7 +85,9 @@ def load_train_data(train_dir,num_images=100,mode="png"):
 		labs.append(lab)
 	return np.asarray(imgs), np.asarray(labs)
 
-#def load_test_data(test_dit,patch_size,num_images=50):
+def load_test_image(file_path):
+	img = mpimg.imread(file_path)
+	return np.asarray([img])
 
 def balance_train_data(imgs,labs,num_per_ratio):
 	print("Balancing training data, randomly sampling until %d samples of each type have been generated"%(num_per_ratio))
@@ -149,14 +152,9 @@ def save(img,name):
 	Image.fromarray((img*scaling).astype(np.uint8)).save(name)
 
 def main():
-	imgs_original, labs_original = load_train_data("../data/training_smooth/", num_images=NUM_IMAGES, mode="jpg")
-	imgs, labs = balance_train_data(imgs_original,labs_original,NUM_SAMPLES)
-
 	x = tf.placeholder(tf.float32, [None, None, None, 3])
 	y_ = tf.placeholder(tf.float32, [None, None, None, 2])
 	training = tf.placeholder(tf.bool)
-
-	n_training = imgs.shape[0]
 
 
 	norm = tf.nn.lrn(x, depth_radius=5, bias=1.0, alpha=0.0001, beta=0.75,
@@ -175,18 +173,18 @@ def main():
 	pool4 = pool(conv4)
 
 	unpool4 = unpool(pool4)
-	deconv4 = deconv(unpool4,64,7,activation=None)
+	deconv4 = deconv(unpool4,64,7)
 
 	unpool3 = unpool(deconv4)
-	deconv3 = deconv(unpool3,64,7,activation=None)
+	deconv3 = deconv(unpool3,64,7)
 
 	unpool2 = unpool(deconv3)
-	deconv2 = deconv(unpool2,64,7,activation=None)
+	deconv2 = deconv(unpool2,64,7)
 
 	unpool1 = unpool(deconv2)
-	deconv1 = deconv(unpool1,64,7,activation=None)
+	deconv1 = deconv(unpool1,64,7)
 
-	predictions = conv(deconv1,2,1,activation=None)
+	predictions = conv(deconv1,2,1)
 
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
 
@@ -198,51 +196,67 @@ def main():
 
 	with tf.Session() as sess:
 		saver = tf.train.Saver()
+		imgs_original, labs_original = load_train_data("../data/training_smooth/", num_images=NUM_IMAGES, mode="jpg")
 		if LOAD:
 			saver.restore(sess,SAVE_FILE)
 		else:
 			sess.run(tf.global_variables_initializer())
 
+			imgs, labs = balance_train_data(imgs_original,labs_original,NUM_SAMPLES)
+			n_training = imgs.shape[0]
+
 			training_indices = range(imgs.shape[0])
 
-			epoch_times = []
+			training_times = []
 			for e in range(NUM_EPOCHS):
-				start_time = time.time()
 				training_indices = np.random.permutation(training_indices)
 				print("Training epoch %d of %d"%(e+1,NUM_EPOCHS))
+				minibatches_per_epoch = int(np.ceil(n_training/BATCH_SIZE))
 				for i in range(0,n_training,BATCH_SIZE):
+					start_time = time.time()
 					batch_range = training_indices[i:i+BATCH_SIZE]
-					print("Training: %d of %d"%(int(i/BATCH_SIZE)+1,int(np.ceil(n_training/BATCH_SIZE))))
+					batch_number = int(i/BATCH_SIZE)+1
+					print("Minibatch %d of %d. "%(batch_number,minibatches_per_epoch))
 					batch = [imgs[batch_range],labs[batch_range]]
 					_, mean_loss = sess.run([train_step,tf.reduce_mean(loss)],feed_dict={x: batch[0], y_: batch[1], training: True})
-					print("Loss = ",mean_loss)
-				epoch_times.append(time.time()-start_time)
-				avg_epoch_time = np.mean(epoch_times)
-				time_remaining = avg_epoch_time*(NUM_EPOCHS-e-1)
-				h, m, s = readable_time(time_remaining)
-				print("Estimated time remaining %.2d:%.2d:%.2d"%(h,m,s))
+					print("Loss = %f."%mean_loss)
+					training_times.append(time.time()-start_time)
+					avg_training_time = np.mean(training_times)
+					time_remaining = avg_training_time*(((NUM_EPOCHS-e-1)*minibatches_per_epoch)+(minibatches_per_epoch-batch_number))
+					h, m, s = readable_time(time_remaining)
+					print("[Estimated time remaining %.2d:%.2d:%.2d]\r"%(h,m,s))
 
 			print("Done training")
 			succesful_save = saver.save(sess,SAVE_FILE)
 			print("Model stored in %s"%succesful_save)
 
 
-		print("Generating test predictions...")
-		test_indices = range(NUM_IMAGES)[:10]
-		test_imgs = imgs_original[test_indices]
-		test_labs = tf.argmax(labs_original[test_indices],axis=-1).eval()
-		test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
+		if LOAD:
+			print("Generating submission masks...")
+			for i in range(1,51):
+				img_batch = load_test_image("../data/test_set_smooth/test_%d/test_%d.jpg"%(i,i))
+				print(img_batch.shape)
+				img_prediction = tf.argmax(predictions,axis=-1).eval(feed_dict={x:img_batch, training: False})
+				save(img_prediction[0],"submission_masks/test_%d_prediction.png"%i)
+			print("Done!")
 
-		np.save("test_imgs.npy",test_imgs)
-		np.save("test_labs.npy",test_labs)
-		np.save("test_preds.npy",test_preds)
+		else:
+			print("Generating train predictions...")
+			test_indices = range(10)
+			test_imgs = imgs_original[test_indices]
+			test_labs = tf.argmax(labs_original[test_indices],axis=-1).eval()
+			test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
 
-		for i in range(len(test_imgs)):
-			name = "testImg%d"%(i)
-			save(test_imgs[i],name+"_original.png")
-			save(test_labs[i],name+"_groundtruth.png")
-			save(test_preds[i],name+"_prediction.png")
-		print("Done!")
+			np.save("test_imgs.npy",test_imgs)
+			np.save("test_labs.npy",test_labs)
+			np.save("test_preds.npy",test_preds)
+
+			for i in range(len(test_imgs)):
+				name = "testImg%d"%(i)
+				save(test_imgs[i],name+"_original.png")
+				save(test_labs[i],name+"_groundtruth.png")
+				save(test_preds[i],name+"_prediction.png")
+			print("Done!")
 
 		#print("Calculating score...")
 		#precision, _ = tf.metrics.precision(test_labs,test_preds)
