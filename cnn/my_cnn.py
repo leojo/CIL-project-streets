@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 from __future__ import division
-from __future__ import print_function
 
 import time
 import numpy as np
@@ -10,7 +9,7 @@ from PIL import Image
 
 IMG_PATCH_SIZE = 128
 NUM_IMAGES = 100
-NUM_SAMPLES = 10
+NUM_SAMPLES = 100
 NUM_EPOCHS = 50
 BATCH_SIZE = 10
 LEARNING_RATE = 1e-4
@@ -43,15 +42,17 @@ def img_crop(im, w, h):
 def img_sample(imgs,labs,num):
 	img_samples = []
 	lab_samples = []
+	normal_prob = np.asarray([0.04799823,  0.07454103,  0.10373811,  0.12928556,  0.14443707,0.14443707,  0.12928556,  0.10373811,  0.07454103,  0.04799823])
+	target_nums = np.round((np.ones(10)*num*normal_prob)).astype(np.int32)
 	num_per_ratio = [0]*10
 	n,w,h,c = imgs.shape
-	for i in range(num*10):
+	for i in range(np.sum(target_nums)):
 		m = np.random.randint(n)
 		x = np.random.randint(w-IMG_PATCH_SIZE)
 		y = np.random.randint(h-IMG_PATCH_SIZE)
 		ratio = np.sum(labs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,1]).astype(np.float32)/(IMG_PATCH_SIZE*IMG_PATCH_SIZE)
 		ratio_cat = min(int(ratio*10),9)
-		while num_per_ratio[ratio_cat]>=num:
+		while num_per_ratio[ratio_cat]>=target_nums[ratio_cat]:
 			m = np.random.randint(n)
 			x = np.random.randint(w-IMG_PATCH_SIZE)
 			y = np.random.randint(h-IMG_PATCH_SIZE)
@@ -60,6 +61,8 @@ def img_sample(imgs,labs,num):
 		num_per_ratio[ratio_cat] += 1
 		img_samples.append(imgs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,:])
 		lab_samples.append(labs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,:])
+	print("Acheived the following distribution of training samples:")
+	print(num_per_ratio)
 	return np.asarray(img_samples),np.asarray(lab_samples)
 
 
@@ -216,15 +219,16 @@ def main():
 					start_time = time.time()
 					batch_range = training_indices[i:i+BATCH_SIZE]
 					batch_number = int(i/BATCH_SIZE)+1
-					print("Minibatch %d of %d. "%(batch_number,minibatches_per_epoch))
+					print("Minibatch %d of %d. "%(batch_number,minibatches_per_epoch)),
 					batch = [imgs[batch_range],labs[batch_range]]
 					_, mean_loss = sess.run([train_step,tf.reduce_mean(loss)],feed_dict={x: batch[0], y_: batch[1], training: True})
-					print("Loss = %f."%mean_loss)
+					print("Loss = %f.\t"%mean_loss),
 					training_times.append(time.time()-start_time)
 					avg_training_time = np.mean(training_times)
 					time_remaining = avg_training_time*(((NUM_EPOCHS-e-1)*minibatches_per_epoch)+(minibatches_per_epoch-batch_number))
 					h, m, s = readable_time(time_remaining)
 					print("[Estimated time remaining %.2d:%.2d:%.2d]\r"%(h,m,s))
+				saver.save(sess,SAVE_FILE)
 
 			print("Done training")
 			succesful_save = saver.save(sess,SAVE_FILE)
