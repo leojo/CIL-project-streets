@@ -5,6 +5,10 @@
 #																							 #
 #	Alternatively, load up a pre_existing model and make predictions on test data.			 #
 #																							 #
+#	HOW TO RUN:																				 #
+#	> python roadseg.py [True/False]													     #
+#							This last argument determines whether model will be trained or 	 #
+#							loaded from models folder.   	                                 #
 # ========================================================================================== #
 
 import gzip
@@ -18,9 +22,11 @@ import tensorflow.python.platform
 import numpy
 import tensorflow as tf
 from simplefcn import SimpleFCN
+from cnn import CNN
 import datautils as DU
 import preprocessor as PREP
 import postprocessor as POSTP
+from mask_to_submission import make_submission_file
 
 tf.app.flags.DEFINE_string('train_dir', 'model',
                            """Directory where to write event logs """
@@ -35,22 +41,25 @@ def main(argv=None):  # pylint: disable=unused-argument
 	# Create a local session to run this computation.
 	with tf.Session() as s:
 
-		fcn = SimpleFCN(s, FLAGS);
+		fcn = CNN(s, FLAGS);
 
 		# If this isn't done then fcn tries to load last model.
 		train = strToBool(str(sys.argv[1]))
 		if(train):
 			data_dir = '../data/training/'
-			train_data, gtruth_data = DU.prepareTrainData(data_dir, fcn.IMG_PATCH_SIZE)
+			train_data, gtruth_data = DU.prepareTrainData(data_dir, fcn.IMG_PATCH_SIZE, fcn.TRAINING_SIZE, img_type="png")
 			train_data_preproc = PREP.preprocess(train_data);
 			# Train using our FCN
-			fcn.trainModel(train_data_preproc, gtruth_data) 
+			fcn.trainModel(train_data_preproc, gtruth_data)
+		else:
+			fcn.loadModel()
+			fcn.makeTrainPredictions()
 		
 		# Prepare and preprocess test data so we can make predictions:
 		#test_data = DU.prepareTestData();
 		#test_data_preproc = PREP.preprocess(test_data);
-
 		output_masks = fcn.makePredictions()
+		make_submission_file('testsubmission2.csv')
 		#output_masks_postproc = POSTP.postprocess(output_masks)
 
 		#DU.generateImages(output_masks_postproc)
