@@ -50,7 +50,6 @@ def load_train(train_path, image_size, classes):
                 patch = image[x:x+32, y:y+32]
 
                 if image_label[x, y] > 0:
-                # if image_label[x-16, y-16] > 0:
                     pixel_class = 1
                     cls_1 += 1
 
@@ -72,13 +71,6 @@ def load_train(train_path, image_size, classes):
                     labels_neg.append(label)
                     ids_neg.append(str(i) + "_" + str(x) + "_" + str(y))
                     cls_neg.append(pixel_class)
-
-                # images.append(patch)
-                # label = np.zeros(len(classes))
-                # label[pixel_class] = 1.0
-                # labels.append(label)
-                # ids.append(str(i) + "_" + str(x) + "_" + str(y))
-                # cls.append(pixel_class)
 
         print("Streets: " + str(cls_1) + ", Other: " + str(cls_0))
 
@@ -115,16 +107,10 @@ def load_train(train_path, image_size, classes):
 
     print("length of samples: " + str(len(images)))
 
-    # images = np.array(images)
-    # # images = np.asarray(images).astype(np.float32) / np.max(images)
-    # labels = np.array(labels)
-    # ids = np.array(ids)
-    # cls = np.array(cls)
-
     return images, labels, ids, cls
 
 
-def load_test_image(image_path):
+def load_test_image(id, image_path):
     x_test = []
     x_test_id = []
     print("Reading test image: " + image_path)
@@ -135,7 +121,6 @@ def load_test_image(image_path):
     image = np.array(image, dtype=np.uint32)
     image = image.astype(np.float32)
     image = image / 255
-    # img = cv2.resize(img, (image_size, image_size), cv2.INTER_LINEAR)
 
     for x in range(0, orig_image_size):
         for y in range(0, orig_image_size):
@@ -144,50 +129,7 @@ def load_test_image(image_path):
             x_test.append(patch)
             x_test_id.append(str(id) + "_" + str(x) + "_" + str(y))
 
-    # because we're not creating a DataSet object for the test images, normalization happens here
     x_test = np.array(x_test)
-    # x_test = x_test.(np.float32)
-    # x_test = x_test / 255
-
-    return x_test, x_test_id
-
-
-def load_test(test_path, image_size, classes):
-    path = os.path.join(test_path, '*')
-    directories = sorted(glob.glob(path))
-
-    x_test = []
-    x_test_id = []
-    print("Reading test images")
-    for d in range(0, min(len(directories), 1)):
-        # for dir in directories:
-        dir = directories[d]
-        id = dir.split("_")[len(dir.split("_"))-1]
-        img_path = os.path.join(dir, '*g')
-        files = sorted(glob.glob(img_path))
-
-        for fl in files:
-            # flbase = os.path.basename(fl)
-            print(fl)
-            image = cv2.imread(fl)
-            image = np.lib.pad(image, 16, 'edge')
-            image = np.array(image, dtype=np.uint32)
-            image = image.astype(np.float32)
-            image = image / 255
-            image_size = len(image)
-            # img = cv2.resize(img, (image_size, image_size), cv2.INTER_LINEAR)
-
-            for x in range(16, image_size - 16):
-                for y in range(16, image_size - 16):
-                    patch = image[x - 16:x + 16, y - 16:y + 16]
-
-                    x_test.append(patch)
-                    x_test_id.append(str(id) + "_" + str(x) + "_" + str(y))
-
-    # because we're not creating a DataSet object for the test images, normalization happens here
-    # x_test = np.array(x_test, dtype=np.float32)
-    # x_test = x_test.(np.float32)
-    # x_test = x_test / 255
 
     return x_test, x_test_id
 
@@ -263,7 +205,7 @@ def read_train_sets(train_path, image_size, classes, validation_size=0):
     data_sets = DataSets()
 
     images, labels, ids, cls = load_train(train_path, image_size, classes)
-    images, labels, ids, cls = shuffle(images, labels, ids, cls)  # shuffle the data
+    images, labels, ids, cls = shuffle(images, labels, ids, cls)
 
     if isinstance(validation_size, float):
         validation_size = int(validation_size * images.shape[0])
@@ -284,7 +226,6 @@ def read_train_sets(train_path, image_size, classes, validation_size=0):
     return data_sets
 
 
-def read_test_set(test_path, image_size, classes):
-    images, ids = load_test_image(test_path)
-    # images, ids = load_test(test_path, image_size, classes)
+def read_test_set(id, test_path):
+    images, ids = load_test_image(id, test_path)
     return images, ids

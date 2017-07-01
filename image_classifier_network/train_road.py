@@ -1,5 +1,6 @@
 import os
 import glob
+import math
 import dataset_road
 import numpy as np
 import tensorflow as tf
@@ -34,7 +35,7 @@ classes = ['street', 'other']
 num_classes = len(classes)
 
 # batch size
-batch_size = 10000
+batch_size = 10
 
 # validation split
 validation_size = .2
@@ -229,11 +230,6 @@ session.run(tf.global_variables_initializer())  # for newer versions
 train_batch_size = batch_size
 
 
-# # FOR TENSORBOARD TUTORIAL ONLY
-# writer= tf.summary.FileWriter('/tmp/tensorboard_tut')
-# writer.add_graph(session.graph)
-
-
 def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, loop):
     # Calculate the accuracy on the training-set.
     acc = session.run(accuracy, feed_dict=feed_dict_train)
@@ -286,18 +282,15 @@ def optimize(num_iterations):
         # TensorFlow assigns the variables in feed_dict_train
         # to the placeholder variables and then runs the optimizer.
         session.run(optimizer, feed_dict=feed_dict_train)
-        # saver = tf.train.Saver()
-        # saver.save(session, 'image_classifier_network/my_test_model')
+        saver = tf.train.Saver()
+        saver.save(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
 
         # Print status at end of each epoch (defined as full pass through training dataset).
-        if True or i % int(data.train.num_examples / batch_size) == 0:
+        if i % int(data.train.num_examples / batch_size) == 0:
             val_loss = session.run(cost, feed_dict=feed_dict_validate)
             epoch = int(i / int(data.train.num_examples / batch_size))
 
             print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, i)
-        else:
-            # tf.test.
-            print(i)
 
     # Update the total number of iterations performed.
     total_iterations += num_iterations
@@ -311,18 +304,21 @@ def test():
         path = os.path.join(test_path, '*')
         directories = sorted(glob.glob(path))
 
-        for d in range(0, min(len(directories), 1)):
+        submission = []
+
+        for d in range(0, min(len(directories), 50)):
             picture = np.zeros((608, 608))
             dir = directories[d]
+            id = dir.split("_")[len(dir.split("_")) - 1]
             img_path = os.path.join(dir, '*g')
             files = sorted(glob.glob(img_path))
 
             for fl in files:
-                test_images, test_ids = dataset_road.read_test_set(fl, img_size, classes)
+                test_images, test_ids = dataset_road.read_test_set(id , fl)
 
                 all_patches = test_images.reshape(len(test_images), img_size_flat)
 
-                for i in range(0, int(len(all_patches) / size)):
+                for i in range(0, int(math.ceil(len(all_patches) / size))):
                     start = i * size
                     end = (i + 1) * size
 
@@ -335,11 +331,19 @@ def test():
                             picture[int(information[1])][int(information[2])] = test_preds[v]
                             # print(test_ids[start + v] + " " + str(test_preds[v]))
 
-                    print(i)
+                            submission.append(
+                                '{:03d}_{}_{},{}'.format(
+                                    int(information[0]),
+                                    information[1],
+                                    information[2],
+                                    test_preds[v]))
+
+                    print('prediction batch: ' + str(i))
 
                 save(picture, "results\\" + fl.split("\\")[len(fl.split("\\"))-1] + ".png")
                 # save(picture, fl + "_result.png")
 
-optimize(num_iterations=5000)
-# print_validation_accuracy()
+        np.savetxt('submission.csv', np.array(submission), delimiter=',', fmt="%s")
+
+optimize(num_iterations=1)
 test()
