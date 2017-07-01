@@ -1,3 +1,4 @@
 .idea
 fcn/vgg16.npy
 */__pycache__/*
+predictions_training/*

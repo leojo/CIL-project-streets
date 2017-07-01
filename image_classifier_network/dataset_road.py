@@ -7,15 +7,12 @@ import matplotlib.image as mpimg
 
 
 def load_train(train_path, image_size, classes):
-    images = []
-    labels = []
-    ids = []
-    cls = []
+    images = np.array([])
+    labels = np.array([])
+    ids = np.array([])
+    cls = np.array([])
 
     print('Reading training images')
-    # for fld in classes:  # assuming data directory has a separate folder for each class, and that each folder is named after the class
-    #     index = classes.index(fld)
-    #     print('Loading {} files (Index: {})'.format(fld, index))
 
     path = os.path.join(train_path, 'images', '*g')
     path_label = os.path.join(train_path, 'groundtruth', '*g')
@@ -23,7 +20,17 @@ def load_train(train_path, image_size, classes):
     files = glob.glob(path)
     files_label = glob.glob(path_label)
 
-    for i in range(1, min(len(files), 2)):
+    for i in range(0, min(len(files), 100)):
+        images_pos = []
+        labels_pos = []
+        ids_pos = []
+        cls_pos = []
+
+        images_neg = []
+        labels_neg = []
+        ids_neg = []
+        cls_neg = []
+
         # for fl in files:
         fl = files[i]
         fl_label = files_label[i]
@@ -31,69 +38,158 @@ def load_train(train_path, image_size, classes):
         print('Loading {} files (Index: {})'.format(path, i))
 
         image = cv2.imread(fl)
-        image_size = len(image)
+        orig_image_size = len(image)
+        image = np.lib.pad(image, ((16,16),(16,16),(0,0)), 'edge')
 
-        # image = cv2.resize(image, (image_size, image_size), cv2.INTER_LINEAR)
         image_label = mpimg.imread(fl_label)
-        # image_label = cv2.imread(fl_label)
+        cls_0 = 0
+        cls_1 = 0
 
-        for x in range(16, image_size-32):
-            for y in range(16, image_size-32):
-                patch = image[x - 16:x + 16, y-16:y+16]
+        for x in range(0, orig_image_size, 8):
+            for y in range(0, orig_image_size, 8):
+                patch = image[x:x+32, y:y+32]
 
                 if image_label[x, y] > 0:
+                # if image_label[x-16, y-16] > 0:
                     pixel_class = 1
+                    cls_1 += 1
+
+                    label = np.zeros(len(classes))
+                    label[pixel_class] = 1.0
+
+                    images_pos.append(patch)
+                    labels_pos.append(label)
+                    ids_pos.append(str(i) + "_" + str(x) + "_" + str(y))
+                    cls_pos.append(pixel_class)
                 else:
                     pixel_class = 0
+                    cls_0 += 1
 
-                images.append(patch)
-                label = np.zeros(len(classes))
-                label[pixel_class] = 1.0
-                labels.append(label)
-                ids.append(str(i) + "_" + str(x) + "_" + str(y))
-                cls.append(pixel_class)
+                    label = np.zeros(len(classes))
+                    label[pixel_class] = 1.0
 
-    images = np.array(images)
-    labels = np.array(labels)
-    ids = np.array(ids)
-    cls = np.array(cls)
+                    images_neg.append(patch)
+                    labels_neg.append(label)
+                    ids_neg.append(str(i) + "_" + str(x) + "_" + str(y))
+                    cls_neg.append(pixel_class)
+
+                # images.append(patch)
+                # label = np.zeros(len(classes))
+                # label[pixel_class] = 1.0
+                # labels.append(label)
+                # ids.append(str(i) + "_" + str(x) + "_" + str(y))
+                # cls.append(pixel_class)
+
+        print("Streets: " + str(cls_1) + ", Other: " + str(cls_0))
+
+        min_samples = min(cls_1, cls_0)
+        shuffle(images_neg, labels_neg, ids_neg, cls_neg)
+        shuffle(images_pos, labels_pos, ids_pos, cls_pos)
+
+        temp_images = []
+        temp_labels = []
+        temp_ids = []
+        temp_cls = []
+
+        for c in range(0, min_samples-1):
+            temp_images.append(images_pos[c])
+            temp_labels.append(labels_pos[c])
+            temp_ids.append(ids_pos[c])
+            temp_cls.append(cls_pos[c])
+
+            temp_images.append(images_neg[c])
+            temp_labels.append(labels_neg[c])
+            temp_ids.append(ids_neg[c])
+            temp_cls.append(cls_neg[c])
+
+        if len(images) == 0:
+            images = np.array(temp_images)
+            labels = np.array(temp_labels)
+            ids = np.array(temp_ids)
+            cls = np.array(temp_cls)
+        else:
+            images = np.concatenate((images, temp_images), axis=0)
+            labels = np.concatenate((labels, temp_labels), axis=0)
+            ids = np.concatenate((ids, temp_ids), axis=0)
+            cls = np.concatenate((cls, temp_cls), axis=0)
+
+    print("length of samples: " + str(len(images)))
+
+    # images = np.array(images)
+    # # images = np.asarray(images).astype(np.float32) / np.max(images)
+    # labels = np.array(labels)
+    # ids = np.array(ids)
+    # cls = np.array(cls)
 
     return images, labels, ids, cls
+
+
+def load_test_image(image_path):
+    x_test = []
+    x_test_id = []
+    print("Reading test image: " + image_path)
+
+    image = cv2.imread(image_path)
+    orig_image_size = len(image)
+    image = np.lib.pad(image, ((16,16),(16,16),(0,0)), 'edge')
+    image = np.array(image, dtype=np.uint32)
+    image = image.astype(np.float32)
+    image = image / 255
+    # img = cv2.resize(img, (image_size, image_size), cv2.INTER_LINEAR)
+
+    for x in range(0, orig_image_size):
+        for y in range(0, orig_image_size):
+            patch = image[x :x + 32, y:y + 32]
+
+            x_test.append(patch)
+            x_test_id.append(str(id) + "_" + str(x) + "_" + str(y))
+
+    # because we're not creating a DataSet object for the test images, normalization happens here
+    x_test = np.array(x_test)
+    # x_test = x_test.(np.float32)
+    # x_test = x_test / 255
+
+    return x_test, x_test_id
 
 
 def load_test(test_path, image_size, classes):
     path = os.path.join(test_path, '*')
     directories = sorted(glob.glob(path))
 
-    X_test = []
-    X_test_id = []
+    x_test = []
+    x_test_id = []
     print("Reading test images")
-    for d in range(1, min(len(directories), 2)):
+    for d in range(0, min(len(directories), 1)):
         # for dir in directories:
         dir = directories[d]
+        id = dir.split("_")[len(dir.split("_"))-1]
         img_path = os.path.join(dir, '*g')
         files = sorted(glob.glob(img_path))
 
         for fl in files:
-            flbase = os.path.basename(fl)
+            # flbase = os.path.basename(fl)
             print(fl)
             image = cv2.imread(fl)
+            image = np.lib.pad(image, 16, 'edge')
+            image = np.array(image, dtype=np.uint32)
+            image = image.astype(np.float32)
+            image = image / 255
             image_size = len(image)
             # img = cv2.resize(img, (image_size, image_size), cv2.INTER_LINEAR)
 
-            for x in range(16, image_size - 32):
-                for y in range(16, image_size - 32):
+            for x in range(16, image_size - 16):
+                for y in range(16, image_size - 16):
                     patch = image[x - 16:x + 16, y - 16:y + 16]
 
-                    X_test.append(patch)
-                    X_test_id.append(str(fl) + "_" + str(x) + "_" + str(y))
+                    x_test.append(patch)
+                    x_test_id.append(str(id) + "_" + str(x) + "_" + str(y))
 
-    ### because we're not creating a DataSet object for the test images, normalization happens here
-    X_test = np.array(X_test, dtype=np.uint8)
-    X_test = X_test.astype('float32')
-    X_test = X_test / 255
+    # because we're not creating a DataSet object for the test images, normalization happens here
+    # x_test = np.array(x_test, dtype=np.float32)
+    # x_test = x_test.(np.float32)
+    # x_test = x_test / 255
 
-    return X_test, X_test_id
+    return x_test, x_test_id
 
 
 class DataSet(object):
@@ -147,6 +243,9 @@ class DataSet(object):
             # np.random.shuffle(perm)
             # self._images = self._images[perm]
             # self._labels = self._labels[perm]
+            # self._ids = self._ids[perm]
+            # self._cls = self._cls[perm]
+
             # Start next epoch
 
             start = 0
@@ -186,5 +285,6 @@ def read_train_sets(train_path, image_size, classes, validation_size=0):
 
 
 def read_test_set(test_path, image_size, classes):
-    images, ids = load_test(test_path, image_size, classes)
+    images, ids = load_test_image(test_path)
+    # images, ids = load_test(test_path, image_size, classes)
     return images, ids

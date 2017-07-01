@@ -1,13 +1,9 @@
-import matplotlib.pyplot as plt
-import tensorflow as tf
-import pandas as pd
-import numpy as np
-from sklearn.metrics import confusion_matrix
-import time
-from datetime import timedelta
-import math
+import os
+import glob
 import dataset_road
-import random
+import numpy as np
+import tensorflow as tf
+from PIL import Image
 
 # Convolutions
 filter_size1 = 3
@@ -34,11 +30,11 @@ img_shape = (img_size, img_size)
 
 # class info
 
-classes = ['dogs', 'cats']
+classes = ['street', 'other']
 num_classes = len(classes)
 
 # batch size
-batch_size = 16 * 16 * 16
+batch_size = 10000
 
 # validation split
 validation_size = .2
@@ -46,15 +42,17 @@ validation_size = .2
 # how long to wait after validation loss stops improving before terminating training
 early_stopping = None  # use None if you don't want to implement early stoping
 
-train_path = '..\\data\\training'
-test_path = '..\\data\\test_set_images'
+train_path = '..\\data\\training_smooth'
+test_path = '..\\data\\test_set_smooth'
+
+# train_path = '..\\data\\training'
+# test_path = '..\\data\\test_set_images'
 
 data = dataset_road.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
-test_images, test_ids = dataset_road.read_test_set(test_path, img_size, classes)
 
 print("Size of:")
 print("- Training-set:\t\t{}".format(len(data.train.labels)))
-print("- Test-set:\t\t{}".format(len(test_images)))
+# print("- Test-set:\t\t{}".format(len(test_images)))
 print("- Validation-set:\t{}".format(len(data.valid.labels)))
 
 
@@ -226,22 +224,36 @@ optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
 correct_prediction = tf.equal(y_pred_cls, y_true_cls)
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-session.run(tf.global_variables_initializer()) # for newer versions
+session.run(tf.global_variables_initializer())  # for newer versions
 # session.run(tf.initialize_all_variables())  # for older versions
 train_batch_size = batch_size
 
 
-### FOR TENSORBOARD TUTORIAL ONLY
+# # FOR TENSORBOARD TUTORIAL ONLY
 # writer= tf.summary.FileWriter('/tmp/tensorboard_tut')
 # writer.add_graph(session.graph)
 
 
-def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss):
+def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, loop):
     # Calculate the accuracy on the training-set.
     acc = session.run(accuracy, feed_dict=feed_dict_train)
     val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
-    msg = "Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
-    print(msg.format(epoch + 1, acc, val_acc, val_loss))
+    msg = "{4} - Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
+    print(msg.format(epoch + 1, acc, val_acc, val_loss, loop))
+
+
+def crop_center(img, crop_x, crop_y):
+    y,x = img.shape
+    start_x = x//2-(crop_x//2)
+    start_y = y//2-(crop_y//2)
+    return img[start_y:start_y+crop_y,start_x:start_x+crop_x]
+
+
+def save(img, name):
+    # if len(img.shape) < 2:
+    #     Image.fromarray(((img.reshape((IMG_PATCH_SIZE, IMG_PATCH_SIZE))) * 255).astype(np.uint8)).save(name)
+    # else:
+    Image.fromarray((img * 255).astype(np.uint8)).save(name)
 
 
 total_iterations = 0
@@ -251,11 +263,7 @@ def optimize(num_iterations):
     # Ensure we update the global variable rather than a local copy.
     global total_iterations
 
-    best_val_loss = float("inf")
-
-    for i in range(total_iterations,
-                   total_iterations + num_iterations):
-
+    for i in range(total_iterations, total_iterations + num_iterations):
         # Get a batch of training examples.
         # x_batch now holds a batch of images and
         # y_true_batch are the true labels for those images.
@@ -278,7 +286,7 @@ def optimize(num_iterations):
         # TensorFlow assigns the variables in feed_dict_train
         # to the placeholder variables and then runs the optimizer.
         session.run(optimizer, feed_dict=feed_dict_train)
-        saver = tf.train.Saver()
+        # saver = tf.train.Saver()
         # saver.save(session, 'image_classifier_network/my_test_model')
 
         # Print status at end of each epoch (defined as full pass through training dataset).
@@ -286,7 +294,7 @@ def optimize(num_iterations):
             val_loss = session.run(cost, feed_dict=feed_dict_validate)
             epoch = int(i / int(data.train.num_examples / batch_size))
 
-            print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss)
+            print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, i)
         else:
             # tf.test.
             print(i)
@@ -295,6 +303,43 @@ def optimize(num_iterations):
     total_iterations += num_iterations
 
 
-optimize(num_iterations=3000)
-# print_validation_accuracy()
+def test():
+    with session:
+        training = tf.placeholder(tf.bool)
+        size = 10000
 
+        path = os.path.join(test_path, '*')
+        directories = sorted(glob.glob(path))
+
+        for d in range(0, min(len(directories), 1)):
+            picture = np.zeros((608, 608))
+            dir = directories[d]
+            img_path = os.path.join(dir, '*g')
+            files = sorted(glob.glob(img_path))
+
+            for fl in files:
+                test_images, test_ids = dataset_road.read_test_set(fl, img_size, classes)
+
+                all_patches = test_images.reshape(len(test_images), img_size_flat)
+
+                for i in range(0, int(len(all_patches) / size)):
+                    start = i * size
+                    end = (i + 1) * size
+
+                    test_preds = tf.argmax(y_pred, axis=-1).eval(feed_dict={x: all_patches[start:end], training: False})
+                    # val_acc = session.run(y_pred, feed_dict={x: all_patches[start:end], training: False})
+
+                    for v in range(0, size):
+                        if (start + v) < len(all_patches):
+                            information = test_ids[start + v].split("_")
+                            picture[int(information[1])][int(information[2])] = test_preds[v]
+                            # print(test_ids[start + v] + " " + str(test_preds[v]))
+
+                    print(i)
+
+                save(picture, "results\\" + fl.split("\\")[len(fl.split("\\"))-1] + ".png")
+                # save(picture, fl + "_result.png")
+
+optimize(num_iterations=5000)
+# print_validation_accuracy()
+test()
