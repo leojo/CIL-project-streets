@@ -9,13 +9,13 @@ from PIL import Image
 
 IMG_PATCH_SIZE = 128
 NUM_IMAGES = 100
-NUM_SAMPLES = 100
-NUM_EPOCHS = 50
+NUM_SAMPLES = 10
+NUM_EPOCHS = 10
 BATCH_SIZE = 10
 LEARNING_RATE = 1e-4
 
 SAVE_FILE = "model.ckpt"
-LOAD = True
+LOAD = False
 
 def readable_time(seconds):
 	secs = int(seconds)%60
@@ -42,17 +42,17 @@ def img_crop(im, w, h):
 def img_sample(imgs,labs,num):
 	img_samples = []
 	lab_samples = []
-	normal_prob = np.asarray([0.04799823,  0.07454103,  0.10373811,  0.12928556,  0.14443707,0.14443707,  0.12928556,  0.10373811,  0.07454103,  0.04799823])
-	target_nums = np.round((np.ones(10)*num*normal_prob)).astype(np.int32)
+	#normal_prob = np.asarray([0.04799823,  0.07454103,  0.10373811,  0.12928556,  0.14443707,0.14443707,  0.12928556,  0.10373811,  0.07454103,  0.04799823])
+	#target_nums = np.round((np.ones(10)*num*normal_prob)).astype(np.int32)
 	num_per_ratio = [0]*10
 	n,w,h,c = imgs.shape
-	for i in range(np.sum(target_nums)):
+	for i in range(10*num):
 		m = np.random.randint(n)
 		x = np.random.randint(w-IMG_PATCH_SIZE)
 		y = np.random.randint(h-IMG_PATCH_SIZE)
 		ratio = np.sum(labs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,1]).astype(np.float32)/(IMG_PATCH_SIZE*IMG_PATCH_SIZE)
 		ratio_cat = min(int(ratio*10),9)
-		while num_per_ratio[ratio_cat]>=target_nums[ratio_cat]:
+		while num_per_ratio[ratio_cat]>=num:#target_nums[ratio_cat]:
 			m = np.random.randint(n)
 			x = np.random.randint(w-IMG_PATCH_SIZE)
 			y = np.random.randint(h-IMG_PATCH_SIZE)
@@ -61,7 +61,7 @@ def img_sample(imgs,labs,num):
 		num_per_ratio[ratio_cat] += 1
 		img_samples.append(imgs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,:])
 		lab_samples.append(labs[m,x:x+IMG_PATCH_SIZE,y:y+IMG_PATCH_SIZE,:])
-	print("Acheived the following distribution of training samples:")
+	print("Achieved the following distribution of training samples:")
 	print(num_per_ratio)
 	return np.asarray(img_samples),np.asarray(lab_samples)
 
