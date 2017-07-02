@@ -1,7 +1,11 @@
 from __future__ import absolute_import
 from __future__ import division
+from __future__ import print_function
 
+import argparse
+import sys
 import time
+
 import numpy as np
 import tensorflow as tf
 import matplotlib.image as mpimg
@@ -10,13 +14,15 @@ from PIL import Image
 IMG_PATCH_SIZE = 128
 NUM_IMAGES = 100
 NUM_SAMPLES = 10
-NUM_EPOCHS = 10
+IMG_SAMPLE_SIZE = 64
+NUM_IMG_SAMPLES = 20
+
+NUM_EPOCHS = 30
 BATCH_SIZE = 10
-LEARNING_RATE = 1e-4
 
 SAVE_FILE = "model.ckpt"
 LOAD = False
-
+SAVE_PATH = "model_2ndEra.ckpt"
 def readable_time(seconds):
 	secs = int(seconds)%60
 	mins = int(seconds/60)%60
@@ -66,12 +72,6 @@ def img_sample(imgs,labs,num):
 	return np.asarray(img_samples),np.asarray(lab_samples)
 
 
-
-
-
-
-
-
 def load_train_data(train_dir,num_images=100,mode="png"):
 	images_dir = train_dir+"images/"
 	labels_dir = train_dir+"groundtruth/"
@@ -82,38 +82,46 @@ def load_train_data(train_dir,num_images=100,mode="png"):
 		image_name = images_dir+imageid+"."+mode
 		label_name = labels_dir+imageid+".png"
 		img = mpimg.imread(image_name)
-		imgs.append(img)
 		lab = np.round(mpimg.imread(label_name))
 		lab = np.stack([1-lab,lab],axis=-1)
+		imgs.append(img)
 		labs.append(lab)
 	return np.asarray(imgs), np.asarray(labs)
 
-def load_test_image(file_path):
-	img = mpimg.imread(file_path)
-	return np.asarray([img])
+def balance_train_data(imgs, labs):
+	print("Balancing training data...")
+	num_per_ratio = [0]*10
+	imgs_sampled = []
+	labs_sampled = []
+	n,w,h,c = imgs.shape
+	for i in range(NUM_IMG_SAMPLES*10):
+		while True:
+			m = np.random.randint(n-IMG_SAMPLE_SIZE)
+			x = np.random.randint(w-IMG_SAMPLE_SIZE)
+			y = np.random.randint(h-IMG_SAMPLE_SIZE)
+			img_sample = imgs[m,x:x+IMG_SAMPLE_SIZE,y:y+IMG_SAMPLE_SIZE,:]
+			lab_sample = labs[m,x:x+IMG_SAMPLE_SIZE,y:y+IMG_SAMPLE_SIZE,:]
+			ratio = np.sum(lab_sample[:,:,1]).astype(np.float32)/(IMG_SAMPLE_SIZE*IMG_SAMPLE_SIZE)
+			ratio_index = min(int(ratio*10),9)
+			if num_per_ratio[ratio_index] < NUM_IMG_SAMPLES:
+				break
+		num_per_ratio[ratio_index] += 1
+		imgs_sampled.append(img_sample)
+		labs_sampled.append(lab_sample)
+	print("Done!")
+	return np.asarray(imgs_sampled), np.asarray(labs_sampled)
 
-def balance_train_data(imgs,labs,num_per_ratio):
-	print("Balancing training data, randomly sampling until %d samples of each type have been generated"%(num_per_ratio))
-	imgs_sampled, labs_sampled = img_sample(imgs,labs,num_per_ratio)
-	indices = []
-	ratios = []
-	for i, lab in enumerate(labs_sampled):
-		road_pixels = np.sum(lab[:,:,1]).astype(np.float32) #number of pixels of class 1 (road)
-		tot_pixels = lab.shape[0]*lab.shape[1]
-		ratio = road_pixels/tot_pixels
-		ratios.append(ratio)
-	ratios = np.asarray(ratios)
-	hist = np.histogram(ratios,range=(0.0,1.0))
-	print("Done balancing!")
-	return imgs_sampled, labs_sampled
+#def load_test_data(test_dit,patch_size,num_images=50):
 
 
-
-
-
-def unpool(value):
+def unpool(value,target):
 	#return tf.image.resize_images(value,tf.shape(target)[1:3])
-	return tf.layers.conv2d_transpose(value,value.get_shape().as_list()[-1],2,2)
+	return tf.layers.conv2d_transpose(
+		inputs=value,
+		filters=value.get_shape()[3],
+		kernel_size=2,
+		strides=2,
+		padding="same")
 
 def pool(value):
 	return tf.layers.max_pooling2d(inputs=value, pool_size=[2,2], strides=2)
@@ -138,28 +146,32 @@ def deconv(value,filters,kernel,strides=1,activation=tf.nn.relu):
 			activity_regularizer=tf.layers.batch_normalization,
 			activation=activation)
 
-
 def show(img):
 	if img.dtype == np.uint8:
-		scaling = 1
+		scale = 1
 	else:
-		scaling = 255
-	Image.fromarray((img*scaling).astype(np.uint8)).show()
+		scale = 255
+	Image.fromarray((img*scale).astype(np.uint8)).show()
 
 
 def save(img,name):
 	if img.dtype == np.uint8:
-		scaling = 1
+		scale = 1
 	else:
-		scaling = 255
-	Image.fromarray((img*scaling).astype(np.uint8)).save(name)
+		scale = 255
+	Image.fromarray((img*scale).astype(np.uint8)).save(name)
 
 def main():
+	imgs, labs = load_train_data("../data/training_smooth/", mode="jpg")
+	imgs_sampled, labs_sampled = balance_train_data(imgs,labs)
+
 	x = tf.placeholder(tf.float32, [None, None, None, 3])
 	y_ = tf.placeholder(tf.float32, [None, None, None, 2])
 	training = tf.placeholder(tf.bool)
 
+	n_training = imgs_sampled.shape[0]
 
+	# Network
 	norm = tf.nn.lrn(x, depth_radius=5, bias=1.0, alpha=0.0001, beta=0.75,
 								name='norm1')
 
@@ -175,99 +187,72 @@ def main():
 	conv4 = conv(pool3,64,7)
 	pool4 = pool(conv4)
 
-	unpool4 = unpool(pool4)
+	unpool4 = unpool(pool4,conv4)
 	deconv4 = deconv(unpool4,64,7)
 
-	unpool3 = unpool(deconv4)
+	unpool3 = unpool(deconv4,conv3)
 	deconv3 = deconv(unpool3,64,7)
 
-	unpool2 = unpool(deconv3)
+	unpool2 = unpool(deconv3,conv2)
 	deconv2 = deconv(unpool2,64,7)
 
-	unpool1 = unpool(deconv2)
+	unpool1 = unpool(deconv2,conv1)
 	deconv1 = deconv(unpool1,64,7)
 
-	predictions = conv(deconv1,2,1)
+	predictions = deconv(deconv1,2,1)
 
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
 
-	#precision, _ = tf.metrics.precision(y_,predictions)
-	#recall, _ = tf.metrics.recall(y_,predictions)
-	#score = tf.scalar_mult(2,tf.divide(tf.scalar_mult(precision,recall),tf.add(precision,recall)))
-
-	train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(loss)
+	train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
 
 	with tf.Session() as sess:
 		saver = tf.train.Saver()
-		imgs_original, labs_original = load_train_data("../data/training_smooth/", num_images=NUM_IMAGES, mode="jpg")
-		if LOAD:
-			saver.restore(sess,SAVE_FILE)
-		else:
-			sess.run(tf.global_variables_initializer())
 
-			imgs, labs = balance_train_data(imgs_original,labs_original,NUM_SAMPLES)
-			n_training = imgs.shape[0]
+		sess.run(tf.global_variables_initializer())
 
-			training_indices = range(imgs.shape[0])
+		training_indices = np.random.permutation(range(n_training))
+		test_indices = range(10)
+		training_times = []
+		start_time = time.time()
+		steps_per_epoch = int(n_training/BATCH_SIZE)
+		for e in range(NUM_EPOCHS):
+			epochs_remaining = NUM_EPOCHS-e-1
+			training_indices = np.random.permutation(training_indices)
+			print("Training epoch %d of %d"%(e+1,NUM_EPOCHS))
+			for i in range(0,n_training,BATCH_SIZE):
+				current_step = int(i/BATCH_SIZE)+1
+				batch_range = training_indices[i:i+BATCH_SIZE]
+				print("Training: %d of %d"%(current_step,steps_per_epoch))
+				batch = [imgs_sampled[batch_range],labs_sampled[batch_range]]
+				_, mean_loss = sess.run([train_step,tf.reduce_mean(loss)],feed_dict={x: batch[0], y_: batch[1], training: True})
+				print("Loss = %f"%mean_loss)
+				end_time = time.time()
+				training_times.append(end_time-start_time)
+				start_time = end_time
+				avg_step_time = np.mean(training_times)
+				steps_remaining_this_epoch = steps_per_epoch-current_step
+				steps_remaining = epochs_remaining*steps_per_epoch+steps_remaining_this_epoch
+				time_remaining = avg_step_time*steps_remaining
+				print("[----- Estimated time remaining %.2d:%.2d:%.2d -----]"%readable_time(time_remaining))
 
-			training_times = []
-			for e in range(NUM_EPOCHS):
-				training_indices = np.random.permutation(training_indices)
-				print("Training epoch %d of %d"%(e+1,NUM_EPOCHS))
-				minibatches_per_epoch = int(np.ceil(n_training/BATCH_SIZE))
-				for i in range(0,n_training,BATCH_SIZE):
-					start_time = time.time()
-					batch_range = training_indices[i:i+BATCH_SIZE]
-					batch_number = int(i/BATCH_SIZE)+1
-					print("Minibatch %d of %d. "%(batch_number,minibatches_per_epoch)),
-					batch = [imgs[batch_range],labs[batch_range]]
-					_, mean_loss = sess.run([train_step,tf.reduce_mean(loss)],feed_dict={x: batch[0], y_: batch[1], training: True})
-					print("Loss = %f.\t"%mean_loss),
-					training_times.append(time.time()-start_time)
-					avg_training_time = np.mean(training_times)
-					time_remaining = avg_training_time*(((NUM_EPOCHS-e-1)*minibatches_per_epoch)+(minibatches_per_epoch-batch_number))
-					h, m, s = readable_time(time_remaining)
-					print("[Estimated time remaining %.2d:%.2d:%.2d]\r"%(h,m,s))
-				saver.save(sess,SAVE_FILE)
+		print("Done training")
+		success = saver.save(sess,SAVE_PATH)
+		print("Model saved in %s"%(success))
 
-			print("Done training")
-			succesful_save = saver.save(sess,SAVE_FILE)
-			print("Model stored in %s"%succesful_save)
+		test_imgs = imgs[test_indices]
+		test_labs = tf.argmax(labs[test_indices],axis=-1).eval()
 
+		test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
 
-		if LOAD:
-			print("Generating submission masks...")
-			for i in range(1,51):
-				img_batch = load_test_image("../data/test_set_smooth/test_%d/test_%d.jpg"%(i,i))
-				print(img_batch.shape)
-				img_prediction = tf.argmax(predictions,axis=-1).eval(feed_dict={x:img_batch, training: False})
-				save(img_prediction[0],"submission_masks/test_%d_prediction.png"%i)
-			print("Done!")
+		np.save("test_imgs.npy",test_imgs)
+		np.save("test_labs.npy",test_labs)
+		np.save("test_preds.npy",test_preds)
 
-		else:
-			print("Generating train predictions...")
-			test_indices = range(10)
-			test_imgs = imgs_original[test_indices]
-			test_labs = tf.argmax(labs_original[test_indices],axis=-1).eval()
-			test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
-
-			np.save("test_imgs.npy",test_imgs)
-			np.save("test_labs.npy",test_labs)
-			np.save("test_preds.npy",test_preds)
-
-			for i in range(len(test_imgs)):
-				name = "testImg%d"%(i)
-				save(test_imgs[i],name+"_original.png")
-				save(test_labs[i],name+"_groundtruth.png")
-				save(test_preds[i],name+"_prediction.png")
-			print("Done!")
-
-		#print("Calculating score...")
-		#precision, _ = tf.metrics.precision(test_labs,test_preds)
-		#recall, _ = tf.metrics.recall(test_labs,test_preds)
-
-		#score = 2*precision*recall/(precision+recall)
-		#print(score)
+		for i in range(len(test_imgs)):
+			name = "testImg%d"%(i)
+			save(test_imgs[i],name+"_original.png")
+			save(test_labs[i],name+"_groundtruth.png")
+			save(test_preds[i],name+"_prediction.png")
 
 if __name__ == '__main__':
 		main()
