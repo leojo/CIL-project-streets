@@ -35,7 +35,7 @@ classes = ['street', 'other']
 num_classes = len(classes)
 
 # batch size
-batch_size = 10
+batch_size = 10000
 
 # validation split
 validation_size = .2
@@ -291,6 +291,8 @@ def optimize(num_iterations):
             epoch = int(i / int(data.train.num_examples / batch_size))
 
             print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, i)
+        else:
+            print("Iteration: {}".format(i))
 
     # Update the total number of iterations performed.
     total_iterations += num_iterations
@@ -345,5 +347,9 @@ def test():
 
         np.savetxt('submission.csv', np.array(submission), delimiter=',', fmt="%s")
 
-optimize(num_iterations=1)
+# Comment to start from fresh
+saver = tf.train.Saver()
+saver.restore(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
+
+optimize(num_iterations=2400)
 test()
