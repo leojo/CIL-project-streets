@@ -1,0 +1,41 @@
+\section{Pre-Processing the images}
+
+We strongly believed that pre-processing the images before training and testing a network will increase the score. Usually images are noisy and we have been thinking about smoothing the image will help the network to be trained faster and more precise.
+
+\subsection{Why smoothed images?}
+
+Of course, by smoothing the images, some features are lost and blurred out. However, we are smoothing the images in a way that the important features still remains. We achieve this by applying the Fast Local Laplacian \cite{FLL}, an edge aware algorithm. It results in blurring out the smaller details while keeping edges of the streets and other objects as sharp as before. Please see below the results of smoothing the image "satImage\_001".
+
+%% Include here images 'image/satImage_001_orig.tif' => original, and 'images/satImage_001_smooth.tif' => smoothed
+
+The main idea of this algorithm is the following: it tries to average the intensities and colors of large areas, but only by concidering the edges of all drastic intensity changes as well. Since the streets should in general be the same color over larger areas, we believe in getting less noisy results in the end.
+
+\subsection{How to smooth the images?}
+
+To smooth all images (the training and test images) in one step, we prepared a Matlab script. The code for applying the Fast Local Laplacian is taken from the original website of the paper \cite{FLL} and modified to smooth all images in a directory with the same parameters.
+\begin{itemize}
+\item Open matlab and select the folder "fast\_local\_laplacian\_filters" as the working directory (or add it to the path)
+\item Open the file "smooth\_all.m"
+\item Adjust the paths on line 4 to 7
+\begin{itemize}
+\item path\_orig: Relative path to the original training images
+\item path\_new: Relative path where the new smoothed images are saved
+\item path\_test\_orig: Relative path to the directory which contains the test-directories
+\item path\_test\_new: Relative path where the test-directories containing the smoothed test-images are saved
+\end{itemize}
+\item Run the script (this lasts for about 5 minutes)
+\item You can find the smoothed images in the new directories. With the current implementation, it is only possible to store the smoothed images as jpegs. Since we are reading in our python-scripts the content of the directories and looping through each file, this was not a limitation or problem for further progressing.
+\end{itemize}
+
+\section{Conclusion}
+	This section summarizes the paper.
+
+% Now we need a bibliography:
+\begin{thebibliography}{5}
+
+	%Each item starts with a \bibitem{reference} command and the details thereafter.
+    \bibitem{FLL} % Conference paper
+    Mathieu Aubry, Sylvain Paris, Samuel W. Hasinoff, Jan Kautz, Frédo Durand -  Fast Local Laplacian Filters: Theory and Applications 
+    \url{http://www.di.ens.fr/~aubry/llf.html}
+
+\end{thebibliography}
