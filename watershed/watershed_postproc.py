@@ -22,7 +22,7 @@ for i in range(1,51):
 
 	# noise removal
 	kernel = np.ones((3,3),np.uint8)
-	opening = cv2.morphologyEx(thresh,cv2.MORPH_OPEN,kernel, iterations = 2)
+	opening = cv2.morphologyEx(thresh,cv2.MORPH_OPEN,kernel, iterations = 1)
 
 	# sure background area
 	sure_bg = cv2.dilate(opening,kernel,iterations=10)
@@ -47,5 +47,9 @@ for i in range(1,51):
 	img[markers == -1] = [0,0,0]
 	img[markers == 1] = [0,0,0]
 	img[markers == 2] = [255,255,255]
+	img[0,:,:] = img[1,:,:]
+	img[-1,:,:] = img[-2,:,:]
+	img[:,0,:] = img[:,1,:]
+	img[:,-1,:] = img[:,-2,:]
 
 	save(img,"test_%d_mask_after.png"%i)
