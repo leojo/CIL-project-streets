@@ -10,15 +10,17 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_SAMPLE_SIZE = 64
-NUM_IMG_SAMPLES = 4000
+IMG_SAMPLE_SIZE = 128
+NUM_IMG_SAMPLES = 2000
 SAMPLE_DIST = "normal" # Must be either "normal" or "uniform"
 
-NUM_EPOCHS = 240
+NUM_EPOCHS = 500
 BATCH_SIZE = 50
 
-LOAD = False
-LOAD_DATA = True #Specifies wether to load the training data or resample
+LEARNING_RATE = 1e-4
+
+LOAD = True
+LOAD_DATA = False #Specifies wether to load the training data or resample
 LOAD_PATH = "model_3rdEra.ckpt"
 DATA_LOAD_PATH = "data_3rdEra.npy"
 SAVE_PATH = "model_3rdEra.ckpt"
@@ -229,7 +231,7 @@ def main():
 
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
 
-	train_step = tf.train.AdamOptimizer(1e-4).minimize(loss)
+	train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(loss)
 
 	epochs_done = tf.Variable(0)
 
@@ -240,10 +242,10 @@ def main():
 			saver.restore(sess,LOAD_PATH)
 			print("Model restored!")
 			resume_epoch = epochs_done.eval()
-			epoch_scores = np.load(EPOCH_SCORE_FILE)
-			assert len(epoch_scores) == resume_epoch
+			#epoch_scores = np.load(EPOCH_SCORE_FILE)
+			#assert len(epoch_scores) == resume_epoch
 			if resume_epoch < NUM_EPOCHS:
-				print("Resuming training from epoch %d"%resume_epoch)
+				print("Resuming training from epoch %d"%(resume_epoch+1))
 				if LOAD_DATA:
 					imgs_sampled = np.load("imgs_"+DATA_LOAD_PATH)
 					labs_sampled = np.load("labs_"+DATA_LOAD_PATH)
@@ -251,7 +253,7 @@ def main():
 					imgs_sampled, labs_sampled = balance_train_data(imgs,labs)
 
 		else:
-			epoch_scores = np.array([])
+			#epoch_scores = np.array([])
 			imgs_sampled, labs_sampled = balance_train_data(imgs,labs)
 			np.save("imgs_"+DATA_SAVE_PATH,imgs_sampled)
 			np.save("labs_"+DATA_SAVE_PATH,labs_sampled)
@@ -286,23 +288,23 @@ def main():
 					print("[----- Estimated time remaining %.2d:%.2d:%.2d -----]"%readable_time(time_remaining))
 				saver.save(sess,SAVE_PATH)
 				sess.run(epochs_done.assign_add(1))
-				current_epoch_scores = []
-				for i in range(0,100,10):
-					test_indices = range(i,i+10)
-					test_imgs = imgs[test_indices]
-					test_labs = labs[test_indices]
-					test_pred_score = sess.run(score,feed_dict={x:test_imgs, y:test_labs, training: False})
-					current_epoch_scores.append(test_pred_score)
+				#current_epoch_scores = []
+				#for i in range(0,100,10):
+				#	test_indices = range(i,i+10)
+				#	test_imgs = imgs[test_indices]
+				#	test_labs = labs[test_indices]
+				#	test_pred_score = sess.run(score,feed_dict={x:test_imgs, y_:test_labs, training: False})
+				#	current_epoch_scores.append(test_pred_score)
 					
-				score = np.mean(current_epoch_scores)
-				print("Epoch %d finished with F1-score: %f"%(e+1,score))
-				epoch_scores = np.append(epoch_scores,score)
-				np.save(EPOCH_SCORE_FILE,epoch_scores)
+				#score = np.mean(current_epoch_scores)
+				#print("Epoch %d finished with F1-score: %f"%(e+1,score))
+				#epoch_scores = np.append(epoch_scores,score)
+				#np.save(EPOCH_SCORE_FILE,epoch_scores)
 						
 
 			print("Done training!")
-			np.save(EPOCH_SCORE_FILE,epoch_scores)
-			print("Trained on %d samples for %d epochs with minibatch size %d"%(NUM_IMG_SAMPLES,NUM_EPOCHS,BATCH_SIZE))
+			#np.save(EPOCH_SCORE_FILE,epoch_scores)
+			print("Trained on %d samples for %d epochs with minibatch size %d"%(NUM_IMG_SAMPLES,NUM_EPOCHS-resume_epoch,BATCH_SIZE))
 			print("Training took %.2d:%.2d:%.2d"%readable_time(time.time()-train_start))
 			success = saver.save(sess,SAVE_PATH)
 			print("Model saved in %s"%(success))
@@ -325,7 +327,7 @@ def main():
 				#save(test_labs[i],name+"_groundtruth.png")
 				save(test_preds[j],name+"_prediction.png")
 
-		if LOAD:
+		if resume_epoch == NUM_EPOCHS:
 			submission_imgs = load_test_data("../data/test_set_smooth",mode="jpg")
 			for i in range(0,50,SUBMISSION_PRED_BATCH_SIZE):
 				submission_batch = submission_imgs[i:i+SUBMISSION_PRED_BATCH_SIZE]
