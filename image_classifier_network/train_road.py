@@ -1,10 +1,23 @@
+import sys
 import os
+import time
 import glob
 import math
 import dataset_road
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+
+def parse_bool(string):
+    return string in ["t","T","True","TRUE","true"]
+
+def readable_time(seconds):
+    secs = int(seconds)%60
+    mins = int(seconds/60)%60
+    hrs = int(seconds/3600)
+    return hrs,mins,secs
+
+TRAIN = parse_bool(sys.argv[1])
 
 # Convolutions
 filter_size1 = 3
@@ -35,7 +48,7 @@ classes = ['street', 'other']
 num_classes = len(classes)
 
 # batch size
-batch_size = 10000
+batch_size = 5000
 
 # validation split
 validation_size = .2
@@ -43,18 +56,18 @@ validation_size = .2
 # how long to wait after validation loss stops improving before terminating training
 early_stopping = None  # use None if you don't want to implement early stoping
 
-train_path = '..\\data\\training_smooth'
-test_path = '..\\data\\test_set_smooth'
+train_path = os.path.join('..','data','training_smooth')
+test_path = os.path.join('..','data','test_set_smooth')
 
 # train_path = '..\\data\\training'
 # test_path = '..\\data\\test_set_images'
+if TRAIN:
+    data = dataset_road.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
 
-data = dataset_road.read_train_sets(train_path, img_size, classes, validation_size=validation_size)
-
-print("Size of:")
-print("- Training-set:\t\t{}".format(len(data.train.labels)))
-# print("- Test-set:\t\t{}".format(len(test_images)))
-print("- Validation-set:\t{}".format(len(data.valid.labels)))
+    print("Size of:")
+    print("- Training-set:\t\t{}".format(len(data.train.labels)))
+    # print("- Test-set:\t\t{}".format(len(test_images)))
+    print("- Validation-set:\t{}".format(len(data.valid.labels)))
 
 
 def new_weights(shape):
@@ -169,146 +182,155 @@ def new_fc_layer(input,  # The previous layer.
     return layer
 
 
-session = tf.Session()
-x = tf.placeholder(tf.float32, shape=[None, img_size_flat], name='x')
-x_image = tf.reshape(x, [-1, img_size, img_size, num_channels])
+with tf.Session() as session:
+    x = tf.placeholder(tf.float32, shape=[None, img_size_flat], name='x')
+    x_image = tf.reshape(x, [-1, img_size, img_size, num_channels])
 
-y_true = tf.placeholder(tf.float32, shape=[None, num_classes], name='y_true')
-y_true_cls = tf.argmax(y_true, dimension=1)
+    y_true = tf.placeholder(tf.float32, shape=[None, num_classes], name='y_true')
+    y_true_cls = tf.argmax(y_true, dimension=1)
 
-layer_conv1, weights_conv1 = \
-    new_conv_layer(input=x_image,
-                   num_input_channels=num_channels,
-                   filter_size=filter_size1,
-                   num_filters=num_filters1,
-                   use_pooling=True)
-# print("now layer2 input")
-# print(layer_conv1.get_shape())
-layer_conv2, weights_conv2 = \
-    new_conv_layer(input=layer_conv1,
-                   num_input_channels=num_filters1,
-                   filter_size=filter_size2,
-                   num_filters=num_filters2,
-                   use_pooling=True)
-# print("now layer3 input")
-# print(layer_conv2.get_shape())
+    layer_conv1, weights_conv1 = \
+        new_conv_layer(input=x_image,
+                       num_input_channels=num_channels,
+                       filter_size=filter_size1,
+                       num_filters=num_filters1,
+                       use_pooling=True)
+    # print("now layer2 input")
+    # print(layer_conv1.get_shape())
+    layer_conv2, weights_conv2 = \
+        new_conv_layer(input=layer_conv1,
+                       num_input_channels=num_filters1,
+                       filter_size=filter_size2,
+                       num_filters=num_filters2,
+                       use_pooling=True)
+    # print("now layer3 input")
+    # print(layer_conv2.get_shape())
 
-layer_conv3, weights_conv3 = \
-    new_conv_layer(input=layer_conv2,
-                   num_input_channels=num_filters2,
-                   filter_size=filter_size3,
-                   num_filters=num_filters3,
-                   use_pooling=True)
-# print("now layer flatten input")
-# print(layer_conv3.get_shape())
+    layer_conv3, weights_conv3 = \
+        new_conv_layer(input=layer_conv2,
+                       num_input_channels=num_filters2,
+                       filter_size=filter_size3,
+                       num_filters=num_filters3,
+                       use_pooling=True)
+    # print("now layer flatten input")
+    # print(layer_conv3.get_shape())
 
-layer_flat, num_features = flatten_layer(layer_conv3)
+    layer_flat, num_features = flatten_layer(layer_conv3)
 
-layer_fc1 = new_fc_layer(input=layer_flat,
-                         num_inputs=num_features,
-                         num_outputs=fc_size,
-                         use_relu=True)
+    layer_fc1 = new_fc_layer(input=layer_flat,
+                             num_inputs=num_features,
+                             num_outputs=fc_size,
+                             use_relu=True)
 
-layer_fc2 = new_fc_layer(input=layer_fc1,
-                         num_inputs=fc_size,
-                         num_outputs=num_classes,
-                         use_relu=False)
+    layer_fc2 = new_fc_layer(input=layer_fc1,
+                             num_inputs=fc_size,
+                             num_outputs=num_classes,
+                             use_relu=False)
 
-y_pred = tf.nn.softmax(layer_fc2, name='y_pred')
+    y_pred = tf.nn.softmax(layer_fc2, name='y_pred')
 
-y_pred_cls = tf.argmax(y_pred, dimension=1)
-cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=layer_fc2,
-                                                        labels=y_true)
-cost = tf.reduce_mean(cross_entropy)
+    y_pred_cls = tf.argmax(y_pred, dimension=1)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=layer_fc2,
+                                                            labels=y_true)
+    cost = tf.reduce_mean(cross_entropy)
 
-optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
-correct_prediction = tf.equal(y_pred_cls, y_true_cls)
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
+    correct_prediction = tf.equal(y_pred_cls, y_true_cls)
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-session.run(tf.global_variables_initializer())  # for newer versions
-# session.run(tf.initialize_all_variables())  # for older versions
-train_batch_size = batch_size
-
-
-def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, loop):
-    # Calculate the accuracy on the training-set.
-    acc = session.run(accuracy, feed_dict=feed_dict_train)
-    val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
-    msg = "{4} - Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
-    print(msg.format(epoch + 1, acc, val_acc, val_loss, loop))
+    saver = tf.train.Saver()
+    session.run(tf.global_variables_initializer())  # for newer versions
+    # session.run(tf.initialize_all_variables())  # for older versions
+    train_batch_size = batch_size
 
 
-def crop_center(img, crop_x, crop_y):
-    y,x = img.shape
-    start_x = x//2-(crop_x//2)
-    start_y = y//2-(crop_y//2)
-    return img[start_y:start_y+crop_y,start_x:start_x+crop_x]
+    def print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, loop):
+        # Calculate the accuracy on the training-set.
+        acc = session.run(accuracy, feed_dict=feed_dict_train)
+        val_acc = session.run(accuracy, feed_dict=feed_dict_validate)
+        msg = "{4} - Epoch {0} --- Training Accuracy: {1:>6.1%}, Validation Accuracy: {2:>6.1%}, Validation Loss: {3:.3f}"
+        print(msg.format(epoch + 1, acc, val_acc, val_loss, loop))
 
 
-def save(img, name):
-    # if len(img.shape) < 2:
-    #     Image.fromarray(((img.reshape((IMG_PATCH_SIZE, IMG_PATCH_SIZE))) * 255).astype(np.uint8)).save(name)
-    # else:
-    Image.fromarray((img * 255).astype(np.uint8)).save(name)
+    def crop_center(img, crop_x, crop_y):
+        y,x = img.shape
+        start_x = x//2-(crop_x//2)
+        start_y = y//2-(crop_y//2)
+        return img[start_y:start_y+crop_y,start_x:start_x+crop_x]
 
 
-total_iterations = 0
+    def save(img, name):
+        # if len(img.shape) < 2:
+        #     Image.fromarray(((img.reshape((IMG_PATCH_SIZE, IMG_PATCH_SIZE))) * 255).astype(np.uint8)).save(name)
+        # else:
+        Image.fromarray((img * 255).astype(np.uint8)).save(name)
 
 
-def optimize(num_iterations):
-    # Ensure we update the global variable rather than a local copy.
-    global total_iterations
-
-    for i in range(total_iterations, total_iterations + num_iterations):
-        # Get a batch of training examples.
-        # x_batch now holds a batch of images and
-        # y_true_batch are the true labels for those images.
-        x_batch, y_true_batch, _, cls_batch = data.train.next_batch(train_batch_size)
-        x_valid_batch, y_valid_batch, _, valid_cls_batch = data.valid.next_batch(train_batch_size)
-
-        # Convert shape from [num examples, rows, columns, depth]
-        # to [num examples, flattened image shape]
-        x_batch = x_batch.reshape(train_batch_size, img_size_flat)
-        x_valid_batch = x_valid_batch.reshape(train_batch_size, img_size_flat)
-        # Put the batch into a dict with the proper names
-        # for placeholder variables in the TensorFlow graph.
-        feed_dict_train = {x: x_batch,
-                           y_true: y_true_batch}
-
-        feed_dict_validate = {x: x_valid_batch,
-                              y_true: y_valid_batch}
-
-        # Run the optimizer using this batch of training data.
-        # TensorFlow assigns the variables in feed_dict_train
-        # to the placeholder variables and then runs the optimizer.
-        session.run(optimizer, feed_dict=feed_dict_train)
-        saver = tf.train.Saver()
-        saver.save(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
-
-        # Print status at end of each epoch (defined as full pass through training dataset).
-        if i % int(data.train.num_examples / batch_size) == 0:
-            val_loss = session.run(cost, feed_dict=feed_dict_validate)
-            epoch = int(i / int(data.train.num_examples / batch_size))
-
-            print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, i)
-        else:
-            print("Iteration: {}".format(i))
-
-    # Update the total number of iterations performed.
-    total_iterations += num_iterations
+    total_iterations = 0
 
 
-def test():
-    with session:
+    def optimize(num_iterations):
+        # Ensure we update the global variable rather than a local copy.
+        global total_iterations
+        absolute_start_time = time.time()
+        start_time = time.time()
+        iter_times = []
+        for i in range(total_iterations, total_iterations + num_iterations):
+            # Get a batch of training examples.
+            # x_batch now holds a batch of images and
+            # y_true_batch are the true labels for those images.
+            x_batch, y_true_batch, _, cls_batch = data.train.next_batch(train_batch_size)
+            x_valid_batch, y_valid_batch, _, valid_cls_batch = data.valid.next_batch(train_batch_size)
+
+            # Convert shape from [num examples, rows, columns, depth]
+            # to [num examples, flattened image shape]
+            x_batch = x_batch.reshape(train_batch_size, img_size_flat)
+            x_valid_batch = x_valid_batch.reshape(train_batch_size, img_size_flat)
+            # Put the batch into a dict with the proper names
+            # for placeholder variables in the TensorFlow graph.
+            feed_dict_train = {x: x_batch,
+                               y_true: y_true_batch}
+
+            feed_dict_validate = {x: x_valid_batch,
+                                  y_true: y_valid_batch}
+
+            # Run the optimizer using this batch of training data.
+            # TensorFlow assigns the variables in feed_dict_train
+            # to the placeholder variables and then runs the optimizer.
+            session.run(optimizer, feed_dict=feed_dict_train)
+            end_time = time.time()
+            iter_times.append(end_time-start_time)
+            start_time = end_time
+            # Print status at end of each epoch (defined as full pass through training dataset).
+            if i % int(data.train.num_examples / batch_size) == 0:
+                val_loss = session.run(cost, feed_dict=feed_dict_validate)
+                epoch = int(i / int(data.train.num_examples / batch_size))
+                saver.save(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
+                print_progress(epoch, feed_dict_train, feed_dict_validate, val_loss, i)
+            else:
+                avg_iter_time = np.mean(iter_times)
+                iters_left = num_iterations-i-1
+                time_left = avg_iter_time*iters_left
+                h,m,s = readable_time(time_left)
+                print("Iteration: {}\t[Estimated time remaining {:02d}:{:02d}:{:02d}]".format(i,h,m,s,iters_left,avg_iter_time))
+
+        # Update the total number of iterations performed.
+        print("DONE! Elapsed time: {:02d}:{:02d}:{:02d}".format(*readable_time(time.time()-absolute_start_time)))
+        total_iterations += num_iterations
+
+
+    def test():
+        print("Getting here?")
         training = tf.placeholder(tf.bool)
         size = 10000
 
         path = os.path.join(test_path, '*')
+        print(path)
         directories = sorted(glob.glob(path))
-
+        print(directories)
         submission = []
 
-        for d in range(0, min(len(directories), 50)):
+        for d in range(0, min(len(directories), 2)):
             picture = np.zeros((608, 608))
             dir = directories[d]
             id = dir.split("_")[len(dir.split("_")) - 1]
@@ -341,15 +363,15 @@ def test():
                                     test_preds[v]))
 
                     print('prediction batch: ' + str(i))
-
-                save(picture, "results\\" + fl.split("\\")[len(fl.split("\\"))-1] + ".png")
+                save(picture, "results"+ os.sep + fl.split(os.sep)[len(fl.split(os.sep))-1] + ".png")
                 # save(picture, fl + "_result.png")
 
         np.savetxt('submission.csv', np.array(submission), delimiter=',', fmt="%s")
 
-# Comment to start from fresh
-saver = tf.train.Saver()
-saver.restore(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
-
-optimize(num_iterations=2400)
-test()
+    # Comment to start from fresh
+    if TRAIN:
+        optimize(num_iterations=100)
+    else:
+        saver.restore(session, os.path.join(os.getcwd(), 'trained_variables.ckpt'))
+        print("Model restored! Generating test predictions...")
+        test()
