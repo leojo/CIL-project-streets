@@ -10,26 +10,47 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_SAMPLE_SIZE = 128
-NUM_IMG_SAMPLES = 100
+def parse_bool(string):
+	return string in ["TRUE","True","true","T","t","1"]
+
+help = "Parameters must be exactly 10:\n"+\
+	"arg1  [string]  : Directory to store predictions (must exist)\n"+\
+	"arg2  [string]  : Directory where the training data is stored\n"+\
+	"arg3  [string]  : Filetype of the training data (png, jpg, ...)\n"+\
+	"arg4  [string]  : Directory where the test data is stored\n"+\
+	"arg5  [string]  : Filetype of the test data (png, jpg, ...)\n"+\
+	"arg6  [integer] : Size of the sampled image patches for training\n"+\
+	"arg7  [integer] : Total number of patches to sample\n"+\
+	"arg8  [integer] : Number of epochs to train for\n"+\
+	"arg9  [integer] : Minibatch size for training\n"+\
+	"arg10 [boolean] : Wether to load a checkpoint or not (start from scratch)."
+
+if not len(sys.argv)==11:
+	print(help)
+	exit()
+
+IMG_SAMPLE_SIZE = int(sys.argv[6])
+NUM_IMG_SAMPLES = int(sys.argv[7])
 SAMPLE_DIST = "uniform" # Must be either "normal" or "uniform"
 
-NUM_EPOCHS = 25
-BATCH_SIZE = 5
+NUM_EPOCHS = int(sys.argv[8])
+BATCH_SIZE = int(sys.argv[9])
 
 LEARNING_RATE = 1e-4
 
-LOAD = True
-LOAD_DATA = True #Specifies wether to load the training data or resample
-LOAD_PATH = "128_4000_340_50.ckpt"
-DATA_LOAD_PATH = "128_4000_120_50.npy"
-SAVE_PATH = "128_4000_340_50.ckpt"
-DATA_SAVE_PATH = DATA_LOAD_PATH
-
-EPOCH_SCORE_FILE = "epoch_scores.npy"
+LOAD = parse_bool(sys.argv[10])
+NAME = str(IMG_SAMPLE_SIZE)+"_"+str(NUM_IMG_SAMPLES)+"_"+str(NUM_EPOCHS)+"_"+str(BATCH_SIZE)
+LOAD_PATH = NAME+".ckpt"
+DATA_LOAD_PATH = NAME+".npy"
 
 SUBMISSION_PRED_BATCH_SIZE = 5
-SUBMISSION_DIR = "submission_masks"
+SUBMISSION_DIR = sys.argv[1]
+
+TRAIN_DATA_DIR = sys.argv[2]
+TRAIN_DATA_TYPE= sys.argv[3]
+
+TEST_DATA_DIR = sys.argv[4]
+TEST_DATA_TYPE= sys.argv[5]
 
 def readable_time(seconds):
 	secs = int(seconds)%60
@@ -67,14 +88,14 @@ def img_crop(im, w, h):
 	return list_patches
 
 def load_train_data(train_dir,num_images=100,mode="png"):
-	images_dir = train_dir+"images/"
-	labels_dir = train_dir+"groundtruth/"
+	images_dir = os.path.join(train_dir,"images")
+	labels_dir = os.path.join(train_dir,"groundtruth")
 	imgs = []
 	labs = []
 	for i in range(1,num_images+1):
 		imageid = "satImage_%.3d" % i
-		image_name = images_dir+imageid+"."+mode
-		label_name = labels_dir+imageid+".png"
+		image_name = os.path.join(images_dir,imageid+"."+mode)
+		label_name = os.path.join(labels_dir,imageid+".png")
 		img = mpimg.imread(image_name)
 		lab = np.round(mpimg.imread(label_name))
 		lab = np.stack([1-lab,lab],axis=-1)
@@ -220,26 +241,20 @@ def main():
 
 	with tf.Session() as sess:
 		saver = tf.train.Saver()
-		imgs, labs = load_train_data("../data/training_smooth/", mode="jpg")
+		imgs, labs = load_train_data(TRAIN_DATA_DIR, mode=TRAIN_DATA_TYPE)
 		if LOAD:
 			saver.restore(sess,LOAD_PATH)
 			print("Model restored!")
 			resume_epoch = epochs_done.eval()
-			#epoch_scores = np.load(EPOCH_SCORE_FILE)
-			#assert len(epoch_scores) == resume_epoch
 			if resume_epoch < NUM_EPOCHS:
 				print("Resuming training from epoch %d"%(resume_epoch+1))
-				if LOAD_DATA:
-					imgs_sampled = np.load("imgs_"+DATA_LOAD_PATH)
-					labs_sampled = np.load("labs_"+DATA_LOAD_PATH)
-				else:
-					imgs_sampled, labs_sampled = balance_train_data(imgs,labs)
+				imgs_sampled = np.load("imgs_"+DATA_LOAD_PATH)
+				labs_sampled = np.load("labs_"+DATA_LOAD_PATH)
 
 		else:
-			#epoch_scores = np.array([])
 			imgs_sampled, labs_sampled = balance_train_data(imgs,labs)
-			np.save("imgs_"+DATA_SAVE_PATH,imgs_sampled)
-			np.save("labs_"+DATA_SAVE_PATH,labs_sampled)
+			np.save("imgs_"+DATA_LOAD_PATH,imgs_sampled)
+			np.save("labs_"+DATA_LOAD_PATH,labs_sampled)
 			sess.run(tf.global_variables_initializer())
 			resume_epoch = 0
 
@@ -269,49 +284,19 @@ def main():
 					steps_remaining = epochs_remaining*steps_per_epoch+steps_remaining_this_epoch
 					time_remaining = avg_step_time*steps_remaining
 					print("[----- Estimated time remaining %.2d:%.2d:%.2d -----]"%readable_time(time_remaining))
-				saver.save(sess,SAVE_PATH)
+				saver.save(sess,LOAD_PATH)
 				sess.run(epochs_done.assign_add(1))
-				#current_epoch_scores = []
-				#for i in range(0,100,10):
-				#	test_indices = range(i,i+10)
-				#	test_imgs = imgs[test_indices]
-				#	test_labs = labs[test_indices]
-				#	test_pred_score = sess.run(score,feed_dict={x:test_imgs, y_:test_labs, training: False})
-				#	current_epoch_scores.append(test_pred_score)
-					
-				#score = np.mean(current_epoch_scores)
-				#print("Epoch %d finished with F1-score: %f"%(e+1,score))
-				#epoch_scores = np.append(epoch_scores,score)
-				#np.save(EPOCH_SCORE_FILE,epoch_scores)
 						
 
 			print("Done training!")
-			#np.save(EPOCH_SCORE_FILE,epoch_scores)
 			print("Trained on %d samples for %d epochs with minibatch size %d"%(NUM_IMG_SAMPLES,NUM_EPOCHS-resume_epoch,BATCH_SIZE))
 			print("Training took %.2d:%.2d:%.2d"%readable_time(time.time()-train_start))
-			success = saver.save(sess,SAVE_PATH)
+			success = saver.save(sess,LOAD_PATH)
 			print("Model saved in %s"%(success))
 
 
-		for i in range(0,100,10):
-			test_indices = range(i,i+10)
-			test_imgs = imgs[test_indices]
-			test_labs = tf.argmax(labs[test_indices],axis=-1).eval()
-
-			test_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:test_imgs, training: False})
-
-			#np.save("test_imgs.npy",test_imgs)
-			#np.save("test_labs.npy",test_labs)
-			#np.save("test_preds.npy",test_preds)
-
-			for j in range(len(test_imgs)):
-				name = "satImage_%.3d"%(i+j+1)
-				#save(test_imgs[i],name+"_original.png")
-				#save(test_labs[i],name+"_groundtruth.png")
-				save(test_preds[j],name+"_prediction.png")
-
 		if resume_epoch == NUM_EPOCHS:
-			submission_imgs = load_test_data("../data/test_set_smooth",mode="jpg")
+			submission_imgs = load_test_data(TEST_DATA_DIR,mode=TEST_DATA_TYPE)
 			for i in range(0,50,SUBMISSION_PRED_BATCH_SIZE):
 				submission_batch = submission_imgs[i:i+SUBMISSION_PRED_BATCH_SIZE]
 				submission_preds = tf.argmax(predictions,axis=-1).eval(feed_dict={x:submission_batch, training: False})
