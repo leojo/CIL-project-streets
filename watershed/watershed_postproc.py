@@ -17,7 +17,7 @@ def save(img,name):
 		scale = 255
 	Image.fromarray((img*scale).astype(np.uint8)).save(name)
 for i in range(1,51):
-	img = cv2.imread("test_%d_mask.png"%i)
+	img = cv2.imread("../cnn/submission_masks/test_%d_mask.png"%i)
 	thresh = img[:,:,0]
 
 	# noise removal
@@ -52,4 +52,4 @@ for i in range(1,51):
 	img[:,0,:] = img[:,1,:]
 	img[:,-1,:] = img[:,-2,:]
 
-	save(img,"test_%d_mask_after.png"%i)
+	save(img,"submission_masks_watershed/test_%d_mask_after.png"%i)

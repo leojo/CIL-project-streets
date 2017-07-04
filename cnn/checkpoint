@@ -1,2 +1,2 @@
-model_checkpoint_path: "model_2ndEra.ckpt"
-all_model_checkpoint_paths: "model_2ndEra.ckpt"
+model_checkpoint_path: "128_4000_340_50.ckpt"
+all_model_checkpoint_paths: "128_4000_340_50.ckpt"

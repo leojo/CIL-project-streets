@@ -2,3 +2,10 @@
 fcn/vgg16.npy
 */__pycache__/*
 predictions_training/*
+**.png
+**.csv
+**.npy
+**.pyc
+**events.out.*
+**.ckpt*
+**.zip
