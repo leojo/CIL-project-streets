@@ -10,21 +10,21 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_SAMPLE_SIZE = 128
-NUM_IMG_SAMPLES = 2000
-SAMPLE_DIST = "normal" # Must be either "normal" or "uniform"
+IMG_SAMPLE_SIZE = 64
+NUM_IMG_SAMPLES = 10000
+SAMPLE_DIST = "uniform" # Must be either "normal" or "uniform"
 
-NUM_EPOCHS = 500
-BATCH_SIZE = 50
+NUM_EPOCHS = 1000
+BATCH_SIZE = 500
 
 LEARNING_RATE = 1e-4
 
 LOAD = True
-LOAD_DATA = False #Specifies wether to load the training data or resample
-LOAD_PATH = "model_3rdEra.ckpt"
-DATA_LOAD_PATH = "data_3rdEra.npy"
-SAVE_PATH = "model_3rdEra.ckpt"
-DATA_SAVE_PATH = "data_3rdEra.npy"
+LOAD_DATA = True #Specifies wether to load the training data or resample
+LOAD_PATH = "64_10000_1000_500.ckpt"
+DATA_LOAD_PATH = "64_10000_1000_500.npy"
+SAVE_PATH = "64_10000_1000_500.ckpt"
+DATA_SAVE_PATH = "64_10000_1000_500.npy"
 
 EPOCH_SCORE_FILE = "epoch_scores.npy"
 
