@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-
+import sys
 import os
 import numpy as np
 import matplotlib.image as mpimg
 import re
+
+if not len(sys.argv)==2:
+    print("You must supply a name for the submission file!")
+    exit()
 
 foreground_threshold = 0.25 # percentage of pixels > 1 required to assign a foreground label to a patch
 
@@ -37,12 +41,10 @@ def masks_to_submission(submission_filename, *image_filenames):
 
 
 if __name__ == '__main__':
-    submission_filename = 'watershed_my_cnn_128trainpatch_4000samples_340epoch_50batch.csv'
-    #submission_filename = 'my_cnn_128trainpatch_4000samples_120epoch_50batch.csv'
+    submission_filename = sys.argv[1]+'.csv'
     image_filenames = []
     for i in range(1, 51):
         image_filename = 'watershed/submission_masks_watershed/test_%d_mask_after.png'%i
-        #image_filename = 'cnn/submission_masks/test_%d_mask.png'%i
         print image_filename
         image_filenames.append(image_filename)
     masks_to_submission(submission_filename, *image_filenames)

@@ -58,19 +58,6 @@ def readable_time(seconds):
 	hrs = int(seconds/3600)
 	return hrs,mins,secs
 
-def f1_score(pred,lab):
-	TP = np.sum(pred*lab,dtype=np.float64)
-	TN = np.sum((1-pred)*(1-lab),dtype=np.float64)
-	FP = np.sum(pred*(1-lab),dtype=np.float64)
-	FN = np.sum((1-pred)*lab,dtype=np.float64)
-
-	precision = TP/(TP+FP)
-	recall = TP/(TP+FN)
-
-	f1 = 2*(precision*recall)/(precision+recall)
-
-	return f1
-
 def img_crop(im, w, h):
 	if w == -1 and h == -1:
 		return [im]	
@@ -146,11 +133,8 @@ def balance_train_data(imgs, labs):
 	print(num_per_ratio)
 	return np.asarray(imgs_sampled), np.asarray(labs_sampled)
 
-#def load_test_data(test_dit,patch_size,num_images=50):
-
 
 def unpool(value,target):
-	#return tf.image.resize_images(value,tf.shape(target)[1:3])
 	return tf.layers.conv2d_transpose(
 		inputs=value,
 		filters=value.get_shape()[3],
