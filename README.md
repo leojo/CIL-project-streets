@@ -58,3 +58,13 @@ You need to run
 > python mask_to_submission.py 
 
 to create the .csv submission file. This will create a submission from the output masks stored in watershed/submission_masks_watershed/.
+
+OTHER
+
+To create a plot that demonstrates the difference in loss over time for the baseline model vs our model, run
+
+> python generate_plots.py
+
+Make sure you have run both our model and the baseline model beforehand to generate datapoints.
+
+The baseline.py is the baseline as provided by the instructors (only slightly modified for our directory structure and for output plots) and is included here for completeness.

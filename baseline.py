@@ -1,6 +1,8 @@
 """
 Baseline for CIL project on road segmentation.
 This simple baseline consits of a CNN with two convolutional+pooling layers with a soft-max loss
+
+This baseline code belongs to the instructors of the Computational Intelligence Lab course of ETHZ, 2017. We have only slightly modified it to accommodate our data & directory structure, and to output loss over time data for plot generation.
 """
 
 
