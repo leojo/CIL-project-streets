@@ -1,5 +1,4 @@
-
-   close all;
+close all;
 
 %% import image
 path_orig = '../data/training_smooth/images/';
@@ -7,11 +6,20 @@ path_new = '../data/training_smooth2/images/';
 path_test_orig = '../data/test_set_smooth/';
 path_test_new = '../data/test_set_smooth2/';
 
+if exist(path_new,'dir') ~= 7
+    mkdir(path_new);
+end
+
+if exist(path_test_new,'dir') ~= 7
+    mkdir(path_test_new);
+end
+
 img_list = dir(sprintf('%s%s', path_orig, '/sat*.jpg'));
 figure(1);
 
 for i = 1:size(img_list)
     file=img_list(i);
+    fprintf('Processing file: %s\t', file.name);
     I_rgb = imread(sprintf('%s%s', path_orig, file.name));
 
     I = rgb2gray(im2double(I_rgb));
@@ -42,10 +50,8 @@ img_list = dir(sprintf('%s%s', path_test_orig, 'test_*'));
 
 for i = 1:size(img_list)
     file=img_list(i);
+    fprintf('Processing file: %s\t', file.name);
     I_rgb = imread(sprintf('%s%s/%s.jpg', path_test_orig, file.name, file.name));
-
-    % name='andy_bernerTriathlon2';
-    % I_rgb = imread(sprintf('images/%s.jpeg',name));
 
     I = rgb2gray(im2double(I_rgb));
     I_ratio=double(I_rgb)./repmat(I,[1 1 3])./255;
@@ -66,5 +72,10 @@ for i = 1:size(img_list)
     
     file_split = strsplit(file.name, '.');
     smooth_name = file_split{1};
+    
+    if exist(sprintf('%s%s', path_test_new, file.name), 'dir') ~= 7
+        mkdir(sprintf('%s%s', path_test_new, file.name))
+    end
+    
     imwrite(I_smoothed, sprintf('%s%s/%s.jpg', path_test_new, file.name, file.name), 'Quality', 100)
 end
