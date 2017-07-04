@@ -14,7 +14,9 @@ Testing
 
 Perform the preprocessing step above, then run
 
-python my_cnn.py
+python my_cnn.py \[prediction_dir\] \[train_data_dir\] \[train_filetype\] \[test_data_dir\] \[test_filetype\] \[patch_size\] \[num_patches\] \[num_epochs\] \[minibatch_size\] \[Resume_from_save\]
+
+Example: python my_cnn.py submission_masks ../data/training_smooth jpg ../data/test_set_smooth jpg 64 100 20 5 False
 
 Preprocessing
 
