@@ -132,6 +132,8 @@ def load_train_data(train_dir,num_images=100,mode="png"):
 		lab = np.stack([1-lab,lab],axis=-1)
 		imgs.append(img)
 		labs.append(lab)
+	imgs = np.asarray(imgs)
+	imgs = ((imgs/np.max(imgs))*255).astype(np.uint8)
 	return np.asarray(imgs), np.asarray(labs)
 
 def load_test_data(test_dir,num_images=50,mode="png"):
@@ -328,7 +330,7 @@ def main():
 			print("Training took %.2d:%.2d:%.2d"%readable_time(time.time()-train_start))
 			success = saver.save(sess,LOAD_PATH)
 			print("Model saved in %s"%(success))
-			np.save("time_loss_data.npy",loss_graph_data)
+			np.save(TRAIN_DATA_TYPE+"_time_loss_data.npy",loss_graph_data)
 		
 		if resume_epoch == NUM_EPOCHS:
 			submission_imgs = load_test_data(TEST_DATA_DIR,mode=TEST_DATA_TYPE)
