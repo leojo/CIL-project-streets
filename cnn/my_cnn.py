@@ -1,3 +1,46 @@
+# =====================================================================================================================
+# Fully Convolutional Neural Network Algorithm
+#
+# This is the main part of our model: A runnable script that trains or, optionally, tests the FCN.
+# 
+# Run this script using
+#	> python my_cnn.py arg1 arg2 arg3 ... arg10
+# 
+# where the parameters are mandatory and defined as follows:
+#
+#
+#	arg1: Directory to store predictions.
+#	arg2: Directory to training data
+# 	arg3: Filetype of training data
+#	arg4: Directory where test data is stored
+#	arg5: Filetype of test data
+#	arg6: Size of the sampled image patches for training
+# 	arg7: Total number of patches to sample.
+#	arg8: Number of epochs to train for
+# 	arg9: Minibatch size for training
+#	arg10: Whether to load a checkpoint or not (in case of failed run previously)
+#
+# As a default, you can run the command
+#
+#	> python my_cnn.py submission_masks ../data/training_smooth jpg ../data/test_set_smooth jpg 64 100 20 5 False
+#
+#
+# Clarification on the last parameters:
+#	If you run with arg10 = True, this script will start to train the model *without* running any predictions 
+#	afterwards. If you decide to train the model first then you need to run the command again with this
+#	parameters set as False to generate the predictions.
+#
+#	Furthermore this parameters allows you to resume a failed or stopped training process. If training failed, 
+#	running the command with True will restart the training process.
+#
+#
+# This algorithm is our work but the inspiration to the network structure and other ideas you may find in papers
+# listed in our references (see pdf).
+#										Andrea Bjornsdottir
+#										Andreas Emch
+#										Leo Johannsson
+# ======================================================================================================================
+
 from __future__ import absolute_import
 from __future__ import division
 
@@ -100,6 +143,8 @@ def load_test_data(test_dir,num_images=50,mode="png"):
 		imgs.append(img)
 	return np.asarray(imgs)
 
+# The data as-is is unbalanced in that there are much more pixels that classify as non-road than road.
+# We balance the data uniformly to battle this.
 def balance_train_data(imgs, labs):
 	print("Balancing training data...")
 	normal_prob = np.asarray([0.04799823,  0.07454103,  0.10373811,  0.12928556,  0.14443707,0.14443707,  0.12928556,  0.10373811,  0.07454103,  0.04799823])
@@ -134,7 +179,7 @@ def balance_train_data(imgs, labs):
 	print(num_per_ratio)
 	return np.asarray(imgs_sampled), np.asarray(labs_sampled)
 
-
+# Network construction functions:
 def unpool(value,target):
 	return tf.layers.conv2d_transpose(
 		inputs=value,
@@ -181,12 +226,14 @@ def save(img,name):
 		scale = 255
 	Image.fromarray((img*scale).astype(np.uint8)).save(name)
 
+# This function optionally trains the network in tensorflow or tests on an existing model
+# that can be loaded from the root folder.
 def main():
 	x = tf.placeholder(tf.float32, [None, None, None, 3])
 	y_ = tf.placeholder(tf.float32, [None, None, None, 2])
 	training = tf.placeholder(tf.bool)
 
-	# Network
+	# Network, see a clear description in the paper
 	norm = tf.nn.lrn(x, depth_radius=5, bias=1.0, alpha=0.0001, beta=0.75,
 								name='norm1')
 
@@ -282,8 +329,7 @@ def main():
 			success = saver.save(sess,LOAD_PATH)
 			print("Model saved in %s"%(success))
 			np.save("time_loss_data.npy",loss_graph_data)
-
-
+		
 		if resume_epoch == NUM_EPOCHS:
 			submission_imgs = load_test_data(TEST_DATA_DIR,mode=TEST_DATA_TYPE)
 			for i in range(0,50,SUBMISSION_PRED_BATCH_SIZE):
