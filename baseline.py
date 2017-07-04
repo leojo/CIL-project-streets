@@ -4,7 +4,7 @@ This simple baseline consits of a CNN with two convolutional+pooling layers with
 """
 
 
-
+import time
 import gzip
 import os
 import sys
@@ -22,11 +22,11 @@ import tensorflow as tf
 NUM_CHANNELS = 3 # RGB images
 PIXEL_DEPTH = 255
 NUM_LABELS = 2
-TRAINING_SIZE = 20
-VALIDATION_SIZE = 5  # Size of the validation set.
+TRAINING_SIZE = 100
+VALIDATION_SIZE = 0  # Size of the validation set.
 SEED = 66478  # Set to None for random seed.
 BATCH_SIZE = 16 # 64
-NUM_EPOCHS = 5
+NUM_EPOCHS = 200
 RESTORE_MODEL = False # If True, restore existing model instead of training a new one
 RECORDING_STEP = 1000
 
@@ -39,6 +39,13 @@ tf.app.flags.DEFINE_string('train_dir', '/tmp/mnist',
                            """Directory where to write event logs """
                            """and checkpoint.""")
 FLAGS = tf.app.flags.FLAGS
+
+
+def readable_time(seconds):
+    secs = int(seconds)%60
+    mins = int(seconds/60)%60
+    hrs = int(seconds/3600)
+    return hrs,mins,secs
 
 # Extract patches from a given image
 def img_crop(im, w, h):
@@ -390,13 +397,13 @@ def main(argv=None):  # pylint: disable=unused-argument
     # Training computation: logits + cross-entropy loss.
     logits = model(train_data_node, True) # BATCH_SIZE*NUM_LABELS
     # print 'logits = ' + str(logits.get_shape()) + ' train_labels_node = ' + str(train_labels_node.get_shape())
-    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+    loss_pure = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
         logits=logits, labels=train_labels_node))
-    tf.summary.scalar('loss', loss)
+    tf.summary.scalar('loss', loss_pure)
 
     all_params_node = [conv1_weights, conv1_biases, conv2_weights, conv2_biases, fc1_weights, fc1_biases, fc2_weights, fc2_biases]
     all_params_names = ['conv1_weights', 'conv1_biases', 'conv2_weights', 'conv2_biases', 'fc1_weights', 'fc1_biases', 'fc2_weights', 'fc2_biases']
-    all_grads_node = tf.gradients(loss, all_params_node)
+    all_grads_node = tf.gradients(loss_pure, all_params_node)
     all_grad_norms_node = []
     for i in range(0, len(all_grads_node)):
         norm_grad_i = tf.global_norm([all_grads_node[i]])
@@ -407,7 +414,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     regularizers = (tf.nn.l2_loss(fc1_weights) + tf.nn.l2_loss(fc1_biases) +
                     tf.nn.l2_loss(fc2_weights) + tf.nn.l2_loss(fc2_biases))
     # Add the regularization term to the loss.
-    loss += 5e-4 * regularizers
+    loss =  loss_pure + 5e-4 * regularizers
 
     # Optimizer: set up a variable that's incremented once per batch and
     # controls the learning rate decay.
@@ -456,14 +463,16 @@ def main(argv=None):  # pylint: disable=unused-argument
             print ('Total number of iterations = ' + str(int(num_epochs * train_size / BATCH_SIZE)))
 
             training_indices = range(train_size)
-
+            train_start = time.time()
+            loss_graph_data = []
+            it_num = 0
             for iepoch in range(num_epochs):
 
                 # Permute training indices
                 perm_indices = numpy.random.permutation(training_indices)
 
                 for step in range (int(train_size / BATCH_SIZE)):
-
+                    it_num +=1
                     offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
                     batch_indices = perm_indices[offset:(offset + BATCH_SIZE)]
 
@@ -476,34 +485,36 @@ def main(argv=None):  # pylint: disable=unused-argument
                     feed_dict = {train_data_node: batch_data,
                                  train_labels_node: batch_labels}
 
-                    if step % RECORDING_STEP == 0:
-
-                        summary_str, _, l, lr, predictions = s.run(
-                            [summary_op, optimizer, loss, learning_rate, train_prediction],
-                            feed_dict=feed_dict)
-                        #summary_str = s.run(summary_op, feed_dict=feed_dict)
-                        summary_writer.add_summary(summary_str, step)
-                        summary_writer.flush()
-
-                        # print_predictions(predictions, batch_labels)
-
-                        print ('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
-                        print ('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
-                        print ('Minibatch error: %.1f%%' % error_rate(predictions,
-                                                                     batch_labels))
-
-                        sys.stdout.flush()
-                    else:
-                        # Run the graph and fetch some of the nodes.
-                        _, l, lr, predictions = s.run(
-                            [optimizer, loss, learning_rate, train_prediction],
-                            feed_dict=feed_dict)
+                    #if step % RECORDING_STEP == 0:
+                    #
+                    #    summary_str, _, l, lr, predictions = s.run(
+                    #        [summary_op, optimizer, loss, learning_rate, train_prediction],
+                    #        feed_dict=feed_dict)
+                    #    #summary_str = s.run(summary_op, feed_dict=feed_dict)
+                    #    summary_writer.add_summary(summary_str, step)
+                    #    summary_writer.flush()
+                    #
+                    #    # print_predictions(predictions, batch_labels)
+                    #
+                    #    print ('Epoch %.2f' % (float(step) * BATCH_SIZE / train_size))
+                    #    print ('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
+                    #    print ('Minibatch error: %.1f%%' % error_rate(predictions,
+                    #                                                 batch_labels))
+                    #
+                    #    sys.stdout.flush()
+                    #else:
+                    # Run the graph and fetch some of the nodes.
+                    _, l, lr, predictions = s.run(
+                        [optimizer, loss_pure, learning_rate, train_prediction],
+                        feed_dict=feed_dict)
+                    loss_graph_data.append([time.time()-train_start,l])
+                    print("Iter %d of %d. Loss: %f"%(it_num,int(num_epochs * train_size / BATCH_SIZE),l))
 
                 # Save the variables to disk.
-                save_path = saver.save(s, FLAGS.train_dir + "/model.ckpt")
-                print("Model saved in file: %s" % save_path)
-
-
+                #save_path = saver.save(s, FLAGS.train_dir + "/model.ckpt")
+                #print("Model saved in file: %s, " % (save_path))
+            print("Training took %.2d:%.2d:%.2d"%readable_time(time.time()-train_start))
+            numpy.save("baseline_time_loss_data.npy",loss_graph_data)
         print ("Running prediction on training set")
         prediction_training_dir = "predictions_training/"
         if not os.path.isdir(prediction_training_dir):

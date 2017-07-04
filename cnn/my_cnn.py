@@ -23,7 +23,8 @@ help = "Parameters must be exactly 10:\n"+\
 	"arg7  [integer] : Total number of patches to sample\n"+\
 	"arg8  [integer] : Number of epochs to train for\n"+\
 	"arg9  [integer] : Minibatch size for training\n"+\
-	"arg10 [boolean] : Wether to load a checkpoint or not (start from scratch)."
+	"arg10 [boolean] : Wether to load a checkpoint or not (start from scratch).\n"+\
+	"Example: python my_cnn.py submission_masks ../data/training_smooth jpg ../data/test_set_smooth jpg 64 100 20 5 False"
 
 if not len(sys.argv)==11:
 	print(help)
@@ -245,6 +246,8 @@ def main():
 		if resume_epoch < NUM_EPOCHS:
 			n_training = imgs_sampled.shape[0]
 
+			loss_graph_data = []
+
 			training_indices = np.random.permutation(range(n_training))
 			training_times = []
 			train_start = time.time()
@@ -267,6 +270,7 @@ def main():
 					steps_remaining_this_epoch = steps_per_epoch-current_step
 					steps_remaining = epochs_remaining*steps_per_epoch+steps_remaining_this_epoch
 					time_remaining = avg_step_time*steps_remaining
+					loss_graph_data.append([end_time-train_start,mean_loss])
 					print("[----- Estimated time remaining %.2d:%.2d:%.2d -----]"%readable_time(time_remaining))
 				saver.save(sess,LOAD_PATH)
 				sess.run(epochs_done.assign_add(1))
@@ -277,6 +281,7 @@ def main():
 			print("Training took %.2d:%.2d:%.2d"%readable_time(time.time()-train_start))
 			success = saver.save(sess,LOAD_PATH)
 			print("Model saved in %s"%(success))
+			np.save("time_loss_data.npy",loss_graph_data)
 
 
 		if resume_epoch == NUM_EPOCHS:
