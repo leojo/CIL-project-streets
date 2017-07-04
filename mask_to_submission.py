@@ -37,10 +37,12 @@ def masks_to_submission(submission_filename, *image_filenames):
 
 
 if __name__ == '__main__':
-    submission_filename = 'dummy_submission.csv'
+    submission_filename = 'watershed_my_cnn_128trainpatch_4000samples_340epoch_50batch.csv'
+    #submission_filename = 'my_cnn_128trainpatch_4000samples_120epoch_50batch.csv'
     image_filenames = []
     for i in range(1, 51):
-        image_filename = 'training/groundtruth/satImage_' + '%.3d' % i + '.png'
+        image_filename = 'watershed/submission_masks_watershed/test_%d_mask_after.png'%i
+        #image_filename = 'cnn/submission_masks/test_%d_mask.png'%i
         print image_filename
         image_filenames.append(image_filename)
     masks_to_submission(submission_filename, *image_filenames)

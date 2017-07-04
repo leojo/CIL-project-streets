@@ -10,21 +10,21 @@ import tensorflow as tf
 import matplotlib.image as mpimg
 from PIL import Image
 
-IMG_SAMPLE_SIZE = 64
-NUM_IMG_SAMPLES = 10000
+IMG_SAMPLE_SIZE = 128
+NUM_IMG_SAMPLES = 100
 SAMPLE_DIST = "uniform" # Must be either "normal" or "uniform"
 
-NUM_EPOCHS = 1000
-BATCH_SIZE = 500
+NUM_EPOCHS = 25
+BATCH_SIZE = 5
 
 LEARNING_RATE = 1e-4
 
 LOAD = True
 LOAD_DATA = True #Specifies wether to load the training data or resample
-LOAD_PATH = "64_10000_1000_500.ckpt"
-DATA_LOAD_PATH = "64_10000_1000_500.npy"
-SAVE_PATH = "64_10000_1000_500.ckpt"
-DATA_SAVE_PATH = "64_10000_1000_500.npy"
+LOAD_PATH = "128_4000_340_50.ckpt"
+DATA_LOAD_PATH = "128_4000_120_50.npy"
+SAVE_PATH = "128_4000_340_50.ckpt"
+DATA_SAVE_PATH = DATA_LOAD_PATH
 
 EPOCH_SCORE_FILE = "epoch_scores.npy"
 
@@ -49,21 +49,6 @@ def f1_score(pred,lab):
 	f1 = 2*(precision*recall)/(precision+recall)
 
 	return f1
-
-# Attempting to write f1_loss functin, hope this works.
-def tf_f1_score(labels, predictions):
-	TP,_ = tf.metrics.true_positives(labels,predictions)
-	FP,_ = tf.metrics.false_positives(labels,predictions)
-	FN,_ = tf.metrics.false_negatives(labels,predictions)
-
-	precision = TP/(TP+FP)
-	recall = TP/(TP+FN)
-
-	f1_score = 2*(precision*recall)/(precision+recall)
-	return f1_score
-
-
-
 
 def img_crop(im, w, h):
 	if w == -1 and h == -1:
@@ -226,8 +211,6 @@ def main():
 	predictions = deconv(deconv1,2,1)
 
 	pred_argmax = tf.argmax(predictions,axis=-1)
-
-	score = tf.reduce_mean(tf_f1_score(labels=tf.argmax(y_,axis=-1), predictions=pred_argmax))
 
 	loss = tf.nn.softmax_cross_entropy_with_logits(labels = y_, logits = predictions)
 
